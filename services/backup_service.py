@@ -1,6 +1,8 @@
+import json
 from datetime import datetime
+from pathlib import Path
 
-from config import Config
+from config import BASE_DIR, Config
 from services.database import get_db, sync_sequences, table_columns, validate_identifier
 from services.operation_log_service import write_operation_log
 
@@ -12,6 +14,7 @@ BACKUP_TABLES = [
     "prizes",
     "prize_serials",
     "member_spin_limits",
+    "admin_line_users",
     "app_settings",
     "operation_logs",
 ]
@@ -49,6 +52,44 @@ def export_backup():
         payload={table: len(rows) for table, rows in backup["tables"].items()},
     )
     return backup, 200
+
+
+def backup_output_dir():
+    configured = getattr(Config, "AUTO_BACKUP_DIR", "backups")
+    path = Path(configured)
+    if not path.is_absolute():
+        path = BASE_DIR / path
+    return path
+
+
+def export_backup_to_file(kind="manual"):
+    backup, status_code = export_backup()
+    if status_code != 200 or not backup.get("ok"):
+        return backup, status_code
+
+    backup_dir = backup_output_dir()
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(Config.timezone()).strftime("%Y%m%d-%H%M%S")
+    safe_kind = "".join(char for char in str(kind) if char.isalnum() or char in {"-", "_"}) or "backup"
+    file_path = backup_dir / f"line-lottery-backup-{safe_kind}-{timestamp}.json"
+    file_path.write_text(json.dumps(backup, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    write_operation_log(
+        "backup_file_saved",
+        message="Backup file saved",
+        payload={
+            "kind": safe_kind,
+            "path": str(file_path),
+            "databaseMode": backup.get("databaseMode"),
+            "exportedAt": backup.get("exportedAt"),
+        },
+    )
+    return {
+        "ok": True,
+        "path": str(file_path),
+        "databaseMode": backup.get("databaseMode"),
+        "exportedAt": backup.get("exportedAt"),
+    }, 200
 
 
 def normalize_backup_payload(payload):

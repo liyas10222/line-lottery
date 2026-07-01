@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>LINE 會員抽獎</title>
+  <title>鮭魚代儲抽獎轉盤</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <script>
@@ -16,13 +16,26 @@
   <main class="app-shell">
     <section class="lottery-layout" aria-live="polite">
       <div class="profile-panel">
-        <div class="profile-row">
-          <img id="avatar" class="avatar" alt="LINE 頭像" src="">
-          <div class="profile-copy">
-            <p class="eyebrow">會員抽獎</p>
-            <h1 id="displayName">會員登入中</h1>
-            <p id="userId" class="user-id">userId：讀取中</p>
+        <div class="brand-block">
+          <p class="eyebrow">鮭魚代儲</p>
+          <h1>抽獎轉盤</h1>
+        </div>
+
+        <div id="authLoggedOut" class="login-card">
+          <p>請先使用 LINE 登入，系統會用 LINE userId 判斷每日抽獎次數。</p>
+          <button id="loginButton" class="line-button" type="button">LINE 登入</button>
+        </div>
+
+        <div id="authLoggedIn" class="profile-card" hidden>
+          <div class="profile-row">
+            <img id="avatar" class="avatar" alt="LINE 頭貼" src="">
+            <div class="profile-copy">
+              <span class="profile-label">會員登入</span>
+              <strong id="displayName">尚未登入</strong>
+              <p id="userId" class="user-id">userId：-</p>
+            </div>
           </div>
+          <button id="logoutButton" class="ghost-button compact-button" type="button">登出</button>
         </div>
 
         <div class="quota-box">
@@ -30,12 +43,12 @@
           <strong id="remaining">-</strong>
         </div>
 
-        <div id="message" class="message">正在連線 LINE 會員登入...</div>
+        <div id="message" class="message">正在初始化 LIFF...</div>
 
         <div class="actions">
           <button id="spinButton" class="primary-button" type="button" disabled>開始抽獎</button>
           <button id="historyButton" class="ghost-button" type="button">我的中獎紀錄</button>
-          <button id="adminButton" class="ghost-button admin-only" type="button" hidden>管理功能</button>
+          <button id="adminButton" class="ghost-button admin-only" type="button" hidden>管理後台</button>
         </div>
       </div>
 
@@ -49,6 +62,18 @@
           <strong>尚未抽獎</strong>
         </div>
       </div>
+    </section>
+
+    <section class="rules-panel">
+      <details>
+        <summary>活動規則</summary>
+        <div class="rules-content">
+          <p>每個 LINE 帳號每日可依活動設定抽獎，實際次數以系統後台紀錄為準。</p>
+          <p>獎項、權重、序號與啟用狀態由後台與 Google Sheet 控制，抽獎結果由伺服器決定。</p>
+          <p>抽中獎品後請截圖保存中獎序號，並將序號提供給鮭魚代儲官方 LINE 兌換。</p>
+          <p>序號一經抽出會立即登記，不會再次出現在獎池中。</p>
+        </div>
+      </details>
     </section>
   </main>
 

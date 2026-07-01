@@ -1,17 +1,20 @@
 const DEFAULT_SEGMENTS = [
-  { code: "COUPON30", name: "30元折價券", shortLabel: "30元" },
-  { code: "COUPON170", name: "170元折價券", shortLabel: "170元" },
-  { code: "COUPON990", name: "990元折價券", shortLabel: "990元" },
-  { code: "COUPON1690", name: "1690元折價券", shortLabel: "1690元" },
-  { code: "COUPON3280", name: "3280元折價券", shortLabel: "3280元" },
+  { code: "COUPON30", name: "30折價券", shortLabel: "30券" },
+  { code: "COUPON170", name: "170折價券", shortLabel: "170券" },
+  { code: "COUPON990", name: "990折價券", shortLabel: "990券" },
+  { code: "COUPON1690", name: "1690折價券", shortLabel: "1690券" },
+  { code: "COUPON3280", name: "3280折價券", shortLabel: "3280券" },
+  { code: "IPHONE16", name: "iPhone 16", shortLabel: "iPhone" },
   { code: "NONE", name: "銘謝惠顧", shortLabel: "銘謝" },
 ];
 
-const WHEEL_COLORS = ["#43c6d8", "#ffd15a", "#ff6f73", "#8a5cf6", "#718198", "#26d968", "#2fbf71"];
+const WHEEL_COLORS = ["#4ec9d8", "#f6c85f", "#ff6b70", "#8f63f4", "#7d8da3", "#29d76b", "#39b782", "#f08c4a"];
+const REDEEM_NOTICE = "請截圖保存中獎序號，並將中獎序號提供給鮭魚代儲官方 LINE 兌換獎品喔！";
 
 let segments = [...DEFAULT_SEGMENTS];
 
 const state = {
+  liffReady: false,
   profile: null,
   canSpin: false,
   spinning: false,
@@ -32,21 +35,13 @@ async function initLotteryPage() {
   await loadPrizeSegments();
   renderWheel();
 
-  const profile = await loadLineProfile();
-  if (!profile) return;
-
-  state.profile = profile;
-  sessionStorage.setItem("lineLotteryProfile", JSON.stringify(profile));
-  renderProfile(profile);
-
-  try {
-    await syncMember(profile);
-    await refreshStatus();
-    await renderAdminEntry(profile.lineUserId);
-  } catch (error) {
-    console.error(error);
-    setMessage("會員資料同步失敗，請稍後再試。", true);
+  const liffReady = await initLiff();
+  if (!liffReady || !liff.isLoggedIn()) {
+    renderLoggedOut();
+    return;
   }
+
+  await completeLogin();
 }
 
 async function initHistoryPage() {
@@ -54,8 +49,12 @@ async function initHistoryPage() {
     window.location.href = "/lottery";
   });
 
+  await initLiff();
   const profile = await loadLineProfile({ allowStoredProfile: true });
-  if (!profile) return;
+  if (!profile) {
+    setHistoryMessage("請先回到抽獎頁完成 LINE 登入。", true);
+    return;
+  }
 
   state.profile = profile;
   document.getElementById("historyUser").textContent = `${profile.displayName} / ${profile.lineUserId}`;
@@ -63,6 +62,8 @@ async function initHistoryPage() {
 }
 
 function bindLotteryButtons() {
+  document.getElementById("loginButton").addEventListener("click", loginWithLine);
+  document.getElementById("logoutButton").addEventListener("click", logoutLine);
   document.getElementById("spinButton").addEventListener("click", spinLottery);
   document.getElementById("historyButton").addEventListener("click", () => {
     window.location.href = "/history";
@@ -72,12 +73,94 @@ function bindLotteryButtons() {
   });
 }
 
+async function initLiff() {
+  const liffId = window.LINE_LOTTERY_CONFIG?.liffId || "";
+  if (!liffId) {
+    setMessage("系統尚未設定 LIFF ID，請確認環境變數。", true);
+    return false;
+  }
+  if (!window.liff) {
+    setMessage("LINE LIFF SDK 載入失敗，請重新整理頁面。", true);
+    return false;
+  }
+  if (state.liffReady) return true;
+
+  try {
+    await liff.init({ liffId, withLoginOnExternalBrowser: true });
+    state.liffReady = true;
+    return true;
+  } catch (error) {
+    console.error(error);
+    setMessage("無法初始化 LINE 登入，請確認 LIFF Endpoint 設定。", true);
+    return false;
+  }
+}
+
+function loginWithLine() {
+  if (!state.liffReady) {
+    setMessage("LINE 登入尚未準備完成，請稍後再試。", true);
+    return;
+  }
+  liff.login({ redirectUri: window.location.href });
+}
+
+function logoutLine() {
+  if (state.liffReady && liff.isLoggedIn()) {
+    liff.logout();
+  }
+  sessionStorage.removeItem("lineLotteryProfile");
+  state.profile = null;
+  state.canSpin = false;
+  renderLoggedOut();
+  setMessage("已登出 LINE。");
+}
+
+async function completeLogin() {
+  const profile = await loadLineProfile();
+  if (!profile) {
+    renderLoggedOut();
+    return;
+  }
+
+  state.profile = profile;
+  sessionStorage.setItem("lineLotteryProfile", JSON.stringify(profile));
+  renderLoggedIn(profile);
+
+  try {
+    await syncMember(profile);
+    await refreshStatus();
+    await renderAdminEntry(profile.lineUserId);
+  } catch (error) {
+    console.error(error);
+    setMessage("會員資料同步失敗，請重新整理後再試。", true);
+  }
+}
+
+function renderLoggedOut() {
+  const loggedOut = document.getElementById("authLoggedOut");
+  const loggedIn = document.getElementById("authLoggedIn");
+  loggedOut.hidden = false;
+  loggedIn.hidden = true;
+  document.getElementById("adminButton").hidden = true;
+  document.getElementById("remaining").textContent = "-";
+  state.canSpin = false;
+  updateSpinButton();
+  setMessage("請先使用 LINE 登入後再開始抽獎。");
+}
+
+function renderLoggedIn(profile) {
+  document.getElementById("authLoggedOut").hidden = true;
+  document.getElementById("authLoggedIn").hidden = false;
+  renderProfile(profile);
+}
+
 async function renderAdminEntry(lineUserId) {
-  const response = await fetch(`/api/member/admin-status?lineUserId=${encodeURIComponent(lineUserId)}`);
-  const data = await response.json();
-  const adminButton = document.getElementById("adminButton");
-  if (data.ok && data.isAdmin) {
-    adminButton.hidden = false;
+  try {
+    const response = await fetch(`/api/member/admin-status?lineUserId=${encodeURIComponent(lineUserId)}`);
+    const data = await response.json();
+    document.getElementById("adminButton").hidden = !(data.ok && data.isAdmin);
+  } catch (error) {
+    console.warn("Unable to check admin status", error);
   }
 }
 
@@ -111,24 +194,9 @@ async function loadLineProfile(options = {}) {
     }
   }
 
-  const liffId = window.LINE_LOTTERY_CONFIG?.liffId || "";
-  if (!liffId) {
-    setMessage("系統尚未設定 LIFF ID，請確認 .env。", true);
-    return null;
-  }
-
-  if (!window.liff) {
-    setMessage("LINE 會員登入載入失敗，請重新整理頁面。", true);
-    return null;
-  }
+  if (!state.liffReady || !liff.isLoggedIn()) return null;
 
   try {
-    await liff.init({ liffId, withLoginOnExternalBrowser: true });
-    if (!liff.isLoggedIn()) {
-      liff.login();
-      return null;
-    }
-
     const profile = await liff.getProfile();
     return {
       lineUserId: profile.userId,
@@ -137,18 +205,15 @@ async function loadLineProfile(options = {}) {
     };
   } catch (error) {
     console.error(error);
-    setMessage("無法取得 LINE 會員資料，請確認 LIFF Endpoint 已指向目前網域。", true);
+    setMessage("無法取得 LINE 會員資料，請重新登入。", true);
     return null;
   }
 }
 
 function renderProfile(profile) {
   const avatar = document.getElementById("avatar");
-  const displayName = document.getElementById("displayName");
-  const userId = document.getElementById("userId");
-
-  displayName.textContent = profile.displayName;
-  userId.textContent = `userId：${profile.lineUserId}`;
+  document.getElementById("displayName").textContent = profile.displayName;
+  document.getElementById("userId").textContent = `userId：${profile.lineUserId}`;
 
   if (profile.pictureUrl) {
     avatar.src = profile.pictureUrl;
@@ -176,6 +241,8 @@ async function syncMember(profile) {
 }
 
 async function refreshStatus() {
+  if (!state.profile) return;
+
   const response = await fetch(`/api/lottery?lineUserId=${encodeURIComponent(state.profile.lineUserId)}`);
   const data = await response.json();
   if (!data.ok) {
@@ -196,8 +263,11 @@ async function refreshStatus() {
 
 function updateSpinButton() {
   const button = document.getElementById("spinButton");
-  button.disabled = !state.canSpin || state.spinning;
+  button.disabled = !state.profile || !state.canSpin || state.spinning;
   button.textContent = state.spinning ? "抽獎中..." : state.canSpin ? "開始抽獎" : "今日已抽過";
+  if (!state.profile) {
+    button.textContent = "請先登入";
+  }
 }
 
 async function spinLottery() {
@@ -205,7 +275,7 @@ async function spinLottery() {
 
   state.spinning = true;
   updateSpinButton();
-  setMessage("正在抽獎...");
+  setMessage("轉盤轉動中...");
 
   try {
     const response = await fetch("/api/lottery", {
@@ -229,7 +299,7 @@ async function spinLottery() {
     await refreshStatus();
   } catch (error) {
     console.error(error);
-    setMessage("連線失敗，請稍後再試。", true);
+    setMessage("系統忙碌中，請稍後再試。", true);
   } finally {
     state.spinning = false;
     updateSpinButton();
@@ -240,12 +310,12 @@ function renderWheel() {
   const wheel = document.getElementById("wheel");
   if (!wheel) return;
 
-  const size = 400;
+  const size = 420;
   const center = size / 2;
-  const radius = 188;
-  const labelRadius = 126;
+  const radius = 198;
+  const labelRadius = segments.length >= 8 ? 130 : 136;
   const slice = 360 / segments.length;
-  const labelFontSize = segments.length >= 10 ? 11 : segments.length >= 8 ? 12 : segments.length >= 7 ? 14 : 17;
+  const labelFontSize = segments.length >= 10 ? 11 : segments.length >= 8 ? 12 : 14;
   const paths = [];
   const labels = [];
 
@@ -254,31 +324,39 @@ function renderWheel() {
     const end = start + slice;
     const labelAngle = start + slice / 2;
     const color = WHEEL_COLORS[index % WHEEL_COLORS.length];
-    const textColor = index === 1 || index === 2 ? "#171b22" : "#ffffff";
+    const textColor = index % 3 === 1 ? "#121820" : "#ffffff";
 
-    paths.push(`<path d="${sectorPath(center, center, radius, start, end)}" fill="${color}" stroke="rgba(255,255,255,.22)" stroke-width="2"></path>`);
+    paths.push(`<path d="${sectorPath(center, center, radius, start, end)}" fill="${color}" stroke="rgba(255,255,255,.26)" stroke-width="2"></path>`);
 
     const labelPoint = polarToCartesian(center, center, labelRadius, labelAngle);
+    const lines = labelLines(segment.shortLabel || segment.name);
     labels.push(`
       <text
         x="${labelPoint.x}"
-        y="${labelPoint.y}"
+        y="${labelPoint.y - ((lines.length - 1) * labelFontSize) / 2}"
         fill="${textColor}"
         font-size="${labelFontSize}"
         font-weight="800"
         text-anchor="middle"
         dominant-baseline="middle"
-      >${escapeHtml(segment.shortLabel)}</text>
+      >${lines.map((line, lineIndex) => `<tspan x="${labelPoint.x}" dy="${lineIndex === 0 ? 0 : labelFontSize + 2}">${escapeHtml(line)}</tspan>`).join("")}</text>
     `);
   });
 
   wheel.innerHTML = `
     <svg class="wheel-svg" viewBox="0 0 ${size} ${size}" role="img" aria-label="抽獎轉盤">
       <g>${paths.join("")}</g>
-      <circle cx="${center}" cy="${center}" r="62" fill="#111a26" stroke="rgba(255,255,255,.18)" stroke-width="8"></circle>
       <g class="wheel-labels">${labels.join("")}</g>
+      <circle cx="${center}" cy="${center}" r="58" fill="#111a26" stroke="rgba(255,255,255,.2)" stroke-width="8"></circle>
     </svg>
   `;
+}
+
+function labelLines(value) {
+  const text = String(value || "").trim();
+  if (text.length <= 5) return [text];
+  if (text.length <= 9) return [text.slice(0, 4), text.slice(4)];
+  return [text.slice(0, 4), text.slice(4, 9), text.slice(9, 14)];
 }
 
 function sectorPath(cx, cy, radius, startAngle, endAngle) {
@@ -307,7 +385,7 @@ function animateWheel(prizeCode) {
   const segmentIndex = Math.max(0, segments.findIndex((segment) => segment.code === prizeCode));
   const segmentSize = 360 / segments.length;
   const segmentCenter = -90 + segmentIndex * segmentSize;
-  const finalRotation = 360 * 6 + (-90 - segmentCenter);
+  const finalRotation = 360 * 7 + (-90 - segmentCenter);
 
   wheel.style.transition = "none";
   wheel.style.transform = "rotate(0deg)";
@@ -315,23 +393,26 @@ function animateWheel(prizeCode) {
 
   return new Promise((resolve) => {
     requestAnimationFrame(() => {
-      wheel.style.transition = "transform 3.4s cubic-bezier(.12,.68,.12,1)";
+      wheel.style.transition = "transform 3.6s cubic-bezier(.12,.72,.1,1)";
       wheel.style.transform = `rotate(${finalRotation}deg)`;
-      window.setTimeout(resolve, 3500);
+      window.setTimeout(resolve, 3700);
     });
   });
 }
 
 function renderResult(prize) {
   const result = document.getElementById("result");
-  const statusText = prize.code === "NONE"
-    ? "再接再厲"
-    : prize.serialCode
-      ? `序號：${prize.serialCode}`
-      : `獎品代碼：${prize.code}`;
+  const isNone = prize.code === "NONE";
+  const codeText = prize.serialCode || prize.code || "";
+  const statusText = isNone ? "銘謝惠顧" : prize.serialCode ? `中獎序號：${prize.serialCode}` : `兌換代碼：${codeText}`;
+  const notice = isNone ? "" : `<p class="redeem-notice">${escapeHtml(REDEEM_NOTICE)}</p>`;
 
-  result.innerHTML = `<span>${escapeHtml(statusText)}</span><strong>${escapeHtml(prize.name)}</strong>`;
-  setMessage(prize.code === "NONE" ? "這次沒有中獎，明天再來。" : "恭喜中獎。");
+  result.innerHTML = `
+    <span>${escapeHtml(statusText)}</span>
+    <strong>${escapeHtml(prize.name)}</strong>
+    ${notice}
+  `;
+  setMessage(isNone ? "這次沒有中獎，明天再來試試。" : "恭喜中獎，請保存中獎序號。");
 }
 
 async function loadHistory(lineUserId) {
@@ -346,8 +427,8 @@ async function loadHistory(lineUserId) {
 
   body.innerHTML = "";
   if (data.records.length === 0) {
-    body.innerHTML = `<tr><td colspan="3" class="empty-cell">尚無抽獎紀錄</td></tr>`;
-    setHistoryMessage("尚無抽獎紀錄。");
+    body.innerHTML = `<tr><td colspan="3" class="empty-cell">目前沒有中獎紀錄</td></tr>`;
+    setHistoryMessage("目前沒有中獎紀錄。");
     return;
   }
 
@@ -402,7 +483,7 @@ function formatDateTime(value) {
 }
 
 function escapeHtml(value) {
-  return String(value)
+  return String(value ?? "")
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")

@@ -10,6 +10,7 @@ from services.google_sheet_service import get_authorized_session, get_sheet_titl
 from services.lottery_service import init_db
 from services.operation_log_service import write_operation_log
 from services.lottery_service import now_iso
+from services.scheduled_backup_service import start_daily_backup_scheduler
 
 
 def create_app():
@@ -34,6 +35,7 @@ def create_app():
     app.register_blueprint(lottery_bp)
     app.register_blueprint(history_bp)
     app.register_blueprint(admin_bp)
+    start_daily_backup_scheduler()
 
     @app.get("/")
     def home():
@@ -41,7 +43,7 @@ def create_app():
 
     @app.get("/admin")
     def admin_page():
-        return render_template("admin.html", admin_user_ids=sorted(Config.ADMIN_LINE_USER_IDS))
+        return render_template("admin.html", admin_user_ids=sorted(Config.ADMIN_LINE_USER_IDS), liff_id=Config.LIFF_ID)
 
     @app.get("/health")
     def health():
