@@ -33,6 +33,13 @@ def service_account_path():
 
 
 def service_account_email():
+    if Config.GOOGLE_SERVICE_ACCOUNT_JSON:
+        try:
+            data = json.loads(Config.GOOGLE_SERVICE_ACCOUNT_JSON)
+            return data.get("client_email") or "service account"
+        except json.JSONDecodeError:
+            return "service account"
+
     path = service_account_path()
     if not path or not path.exists():
         return "service account"
@@ -44,9 +51,20 @@ def service_account_email():
 
 
 def get_authorized_session():
+    if Config.GOOGLE_SERVICE_ACCOUNT_JSON:
+        try:
+            service_account_info = json.loads(Config.GOOGLE_SERVICE_ACCOUNT_JSON)
+            credentials = service_account.Credentials.from_service_account_info(
+                service_account_info,
+                scopes=[SHEETS_SCOPE],
+            )
+            return AuthorizedSession(credentials), None
+        except (ValueError, GoogleAuthError) as error:
+            return None, f"Failed to read Service Account JSON: {error}"
+
     path = service_account_path()
     if not path:
-        return None, "GOOGLE_SERVICE_ACCOUNT_FILE is not configured"
+        return None, "GOOGLE_SERVICE_ACCOUNT_JSON or GOOGLE_SERVICE_ACCOUNT_FILE is not configured"
     if not path.exists():
         return None, f"Service Account file not found: {path}"
 
