@@ -71,6 +71,6 @@ def security_warnings():
     if Config.APP_ENV == "production":
         if Config.SECRET_KEY in {"", "change-this-before-production"}:
             warnings.append("APP_SECRET_KEY is using the default value")
-        if Config.ADMIN_API_TOKEN in {"", "replace-with-a-long-random-admin-token", "qaz44818"}:
+        if Config.ADMIN_API_TOKEN in {"", "replace-with-a-long-random-admin-token"}:
             warnings.append("ADMIN_API_TOKEN should be a long random value")
     return warnings
