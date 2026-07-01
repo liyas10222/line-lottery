@@ -195,22 +195,34 @@ def service_account_summary():
 
 
 def get_authorized_session(scopes=None):
+    scopes = scopes or [SHEETS_READONLY_SCOPE]
+
+    if Config.GOOGLE_SERVICE_ACCOUNT_JSON:
+        try:
+            service_account_info = json.loads(Config.GOOGLE_SERVICE_ACCOUNT_JSON)
+            credentials = service_account.Credentials.from_service_account_info(
+                service_account_info,
+                scopes=scopes,
+            )
+            return AuthorizedSession(credentials), None
+        except (ValueError, GoogleAuthError) as error:
+            return None, f"Service Account JSON 讀取失敗：{error}"
+
     path = service_account_path()
     if not path:
-        return None, "尚未設定 GOOGLE_SERVICE_ACCOUNT_FILE"
+        return None, "尚未設定 GOOGLE_SERVICE_ACCOUNT_JSON 或 GOOGLE_SERVICE_ACCOUNT_FILE"
     if not path.exists():
         return None, f"找不到 Service Account 金鑰檔：{path}"
 
     try:
         credentials = service_account.Credentials.from_service_account_file(
             path,
-            scopes=scopes or [SHEETS_READONLY_SCOPE],
+            scopes=scopes,
         )
     except (OSError, ValueError, GoogleAuthError) as error:
         return None, f"Service Account 金鑰讀取失敗：{error}"
 
     return AuthorizedSession(credentials), None
-
 
 def request_google_json(session, url):
     try:

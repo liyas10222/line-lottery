@@ -27,6 +27,7 @@ class Config:
     GOOGLE_SHEET_NAME = os.getenv("GOOGLE_SHEET_NAME", "轉盤")
     GOOGLE_SHEET_CSV_URL = os.getenv("GOOGLE_SHEET_CSV_URL", "")
     GOOGLE_SERVICE_ACCOUNT_FILE = os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE", "")
+    GOOGLE_SERVICE_ACCOUNT_JSON = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "")
     SHEET_SYNC_ENABLED = os.getenv("SHEET_SYNC_ENABLED", "false").strip().lower() in {
         "1",
         "true",
