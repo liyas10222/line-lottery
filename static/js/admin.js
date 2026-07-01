@@ -26,6 +26,9 @@ function bindAdmin() {
   document.getElementById("sheetResetRebuildButton").addEventListener("click", resetSheetRecordsAndRebuild);
   document.getElementById("loadPrizesButton").addEventListener("click", loadPrizes);
   document.getElementById("prizeList").addEventListener("click", handlePrizeListClick);
+  document.getElementById("loadWritebackFailuresButton").addEventListener("click", loadWritebackFailures);
+  document.getElementById("loadOperationLogsButton").addEventListener("click", loadOperationLogs);
+  document.getElementById("exportBackupButton").addEventListener("click", exportBackup);
 }
 
 function saveToken() {
@@ -176,6 +179,52 @@ async function resetSheetRecordsAndRebuild() {
   } catch (error) {
     showError(error);
   }
+}
+
+async function loadWritebackFailures() {
+  try {
+    const data = await adminFetch("/api/admin/google-sheet/writeback-failures?limit=50");
+    setOutput("operationOutput", data);
+    setAdminMessage("Google Sheet 回寫失敗紀錄已讀取。");
+  } catch (error) {
+    showError(error);
+  }
+}
+
+async function loadOperationLogs() {
+  try {
+    const data = await adminFetch("/api/admin/operation-logs?limit=100");
+    setOutput("operationOutput", data);
+    setAdminMessage("操作紀錄已讀取。");
+  } catch (error) {
+    showError(error);
+  }
+}
+
+async function exportBackup() {
+  try {
+    const data = await adminFetch("/api/admin/backup/export", {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    setOutput("operationOutput", { ok: data.ok, exportedAt: data.exportedAt, databaseMode: data.databaseMode });
+    downloadJson(data, `line-lottery-backup-${new Date().toISOString().slice(0, 19).replaceAll(":", "-")}.json`);
+    setAdminMessage("備份已匯出。");
+  } catch (error) {
+    showError(error);
+  }
+}
+
+function downloadJson(data, filename) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 async function loadPrizes() {

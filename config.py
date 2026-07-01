@@ -14,6 +14,7 @@ class Config:
     SECRET_KEY = os.getenv("APP_SECRET_KEY", "change-this-before-production")
     APP_TIMEZONE = os.getenv("APP_TIMEZONE", "Asia/Taipei")
     DATABASE_PATH = os.getenv("DATABASE_PATH", "lottery.db")
+    DATABASE_URL = os.getenv("DATABASE_URL", "")
     PORT = int(os.getenv("PORT", "5000"))
     DEFAULT_DAILY_SPIN_LIMIT = int(os.getenv("DEFAULT_DAILY_SPIN_LIMIT", "1"))
     ADMIN_API_TOKEN = os.getenv("ADMIN_API_TOKEN", "")
@@ -63,3 +64,13 @@ def validate_runtime_config():
         missing.append("LIFF_ID")
 
     return missing
+
+
+def security_warnings():
+    warnings = []
+    if Config.APP_ENV == "production":
+        if Config.SECRET_KEY in {"", "change-this-before-production"}:
+            warnings.append("APP_SECRET_KEY is using the default value")
+        if Config.ADMIN_API_TOKEN in {"", "replace-with-a-long-random-admin-token", "qaz44818"}:
+            warnings.append("ADMIN_API_TOKEN should be a long random value")
+    return warnings

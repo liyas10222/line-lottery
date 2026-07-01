@@ -156,7 +156,7 @@ def resolve_sheet_name(session):
 def mark_serial_assigned_in_sheet(serial, line_user_id, line_display_name, lottery_record_id, assigned_at):
     source_row = serial.get("source_row")
     if not source_row:
-        return {"ok": False, "skipped": True, "message": "Serial has no source row"}
+        return {"ok": True, "skipped": True, "message": "Serial has no source row"}
 
     session, error = get_authorized_session()
     if error:

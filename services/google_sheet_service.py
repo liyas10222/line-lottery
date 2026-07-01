@@ -13,7 +13,9 @@ from google.auth.transport.requests import AuthorizedSession
 from google.oauth2 import service_account
 
 from config import Config
+from services.database import reset_sequences
 from services.lottery_service import clean_text, get_db, now_iso, now_local
+from services.operation_log_service import write_operation_log
 
 
 SHEETS_READONLY_SCOPE = "https://www.googleapis.com/auth/spreadsheets.readonly"
@@ -554,22 +556,17 @@ def sync_prize_rows(rows, source_sheet="google_sheet", rebuild=False):
 
     with get_db() as db:
         if rebuild:
-            stats["recordsDeleted"] = db.execute("SELECT COUNT(*) FROM lottery_records").fetchone()[0]
-            stats["dailySpinDeleted"] = db.execute("SELECT COUNT(*) FROM daily_spin").fetchone()[0]
-            stats["serialsDeleted"] = db.execute("SELECT COUNT(*) FROM prize_serials").fetchone()[0]
-            stats["prizesDeleted"] = db.execute("SELECT COUNT(*) FROM prizes").fetchone()[0]
+            stats["recordsDeleted"] = db.execute("SELECT COUNT(*) AS count FROM lottery_records").fetchone()["count"]
+            stats["dailySpinDeleted"] = db.execute("SELECT COUNT(*) AS count FROM daily_spin").fetchone()["count"]
+            stats["serialsDeleted"] = db.execute("SELECT COUNT(*) AS count FROM prize_serials").fetchone()["count"]
+            stats["prizesDeleted"] = db.execute("SELECT COUNT(*) AS count FROM prizes").fetchone()["count"]
             db.execute("UPDATE lottery_records SET prize_id = NULL, prize_serial_id = NULL")
             db.execute("UPDATE prize_serials SET lottery_record_id = NULL")
             db.execute("DELETE FROM lottery_records")
             db.execute("DELETE FROM daily_spin")
             db.execute("DELETE FROM prize_serials")
             db.execute("DELETE FROM prizes")
-            db.execute(
-                """
-                DELETE FROM sqlite_sequence
-                WHERE name IN ('prizes', 'prize_serials', 'lottery_records', 'daily_spin')
-                """
-            )
+            reset_sequences(db, ["prizes", "prize_serials", "lottery_records", "daily_spin"])
 
         for index, raw_row in enumerate(rows, start=2):
             row = normalize_row(raw_row)
@@ -646,7 +643,7 @@ def sync_prize_rows(rows, source_sheet="google_sheet", rebuild=False):
                 stock = parse_stock(raw_stock)
                 requires_serial = parse_bool(raw_requires_serial, default=bool(serial_codes))
                 is_active = parse_bool(raw_is_active, default=True)
-                cursor = db.execute(
+                cursor = db.execute_insert(
                     """
                     INSERT INTO prizes
                         (name, code, short_label, weight, stock, requires_serial, is_active, created_at, updated_at)
@@ -863,27 +860,45 @@ def sync_from_google_sheet():
     if summary["configured"] and summary["exists"]:
         rows, error = fetch_rows_from_service_account()
         if error:
+            write_operation_log(
+                "google_sheet_sync",
+                level="error",
+                message="Google Sheet sync failed",
+                payload={"source": "service_account", "error": error},
+            )
             return {"ok": False, "message": error}, 502
 
         stats = sync_prize_rows(rows, source_sheet=f"google_sheet:{Config.GOOGLE_SHEET_NAME}")
-        return {"ok": True, "syncedAt": now_iso(), "source": "service_account", "stats": stats}, 200
+        result = {"ok": True, "syncedAt": now_iso(), "source": "service_account", "stats": stats}
+        write_operation_log("google_sheet_sync", message="Google Sheet sync completed", payload=result)
+        return result, 200
 
     csv_text, error = fetch_sheet_csv()
     if error:
+        write_operation_log(
+            "google_sheet_sync",
+            level="error",
+            message="Google Sheet sync failed",
+            payload={"source": "csv", "error": error},
+        )
         return {"ok": False, "message": error}, 502
 
     rows = rows_from_csv(csv_text)
     stats = sync_prize_rows(rows, source_sheet=f"google_sheet:{Config.GOOGLE_SHEET_GID}")
-    return {"ok": True, "syncedAt": now_iso(), "source": "csv", "stats": stats}, 200
+    result = {"ok": True, "syncedAt": now_iso(), "source": "csv", "stats": stats}
+    write_operation_log("google_sheet_sync", message="Google Sheet sync completed", payload=result)
+    return result, 200
 
 
 def reset_google_sheet_lottery_records():
     session, error = get_authorized_session(scopes=[SHEETS_SCOPE])
     if error:
+        write_operation_log("google_sheet_reset_records", level="error", message="Google Sheet reset failed", payload={"error": error})
         return {"ok": False, "message": error}, 500
 
     sheet_title, error = get_sheet_title(session)
     if error:
+        write_operation_log("google_sheet_reset_records", level="error", message="Google Sheet reset failed", payload={"error": error})
         return {"ok": False, "message": error}, 502
 
     escaped_title = sheet_title.replace("'", "''")
@@ -895,6 +910,7 @@ def reset_google_sheet_lottery_records():
     )
     data, error = request_google_json(session, url)
     if error:
+        write_operation_log("google_sheet_reset_records", level="error", message="Google Sheet reset failed", payload={"error": error})
         return {"ok": False, "message": error}, 502
 
     updates = []
@@ -935,17 +951,20 @@ def reset_google_sheet_lottery_records():
         payload = {"valueInputOption": "RAW", "data": updates[start : start + 500]}
         result, error = send_google_json(session, "POST", batch_url, payload)
         if error:
+            write_operation_log("google_sheet_reset_records", level="error", message="Google Sheet reset failed", payload={"error": error})
             return {"ok": False, "message": error}, 502
         total_updated_rows += result.get("totalUpdatedRows", 0)
         total_updated_cells += result.get("totalUpdatedCells", 0)
 
-    return {
+    result = {
         "ok": True,
         "sheetName": sheet_title,
         "resetRows": reset_row_count,
         "updatedRows": total_updated_rows,
         "updatedCells": total_updated_cells,
-    }, 200
+    }
+    write_operation_log("google_sheet_reset_records", message="Google Sheet records reset", payload=result)
+    return result, 200
 
 
 def reset_sheet_records_and_rebuild():
@@ -964,6 +983,7 @@ def rebuild_from_google_sheet():
     if summary["configured"] and summary["exists"]:
         rows, error = fetch_rows_from_service_account()
         if error:
+            write_operation_log("lottery_pool_rebuild", level="error", message="Lottery pool rebuild failed", payload={"source": "service_account", "error": error})
             return {"ok": False, "message": error}, 502
 
         stats = sync_prize_rows(
@@ -971,15 +991,20 @@ def rebuild_from_google_sheet():
             source_sheet=f"google_sheet:{Config.GOOGLE_SHEET_GID or Config.GOOGLE_SHEET_NAME}",
             rebuild=True,
         )
-        return {"ok": True, "rebuiltAt": now_iso(), "source": "service_account", "stats": stats}, 200
+        result = {"ok": True, "rebuiltAt": now_iso(), "source": "service_account", "stats": stats}
+        write_operation_log("lottery_pool_rebuild", message="Lottery pool rebuilt", payload=result)
+        return result, 200
 
     csv_text, error = fetch_sheet_csv()
     if error:
+        write_operation_log("lottery_pool_rebuild", level="error", message="Lottery pool rebuild failed", payload={"source": "csv", "error": error})
         return {"ok": False, "message": error}, 502
 
     rows = rows_from_csv(csv_text)
     stats = sync_prize_rows(rows, source_sheet=f"google_sheet:{Config.GOOGLE_SHEET_GID}", rebuild=True)
-    return {"ok": True, "rebuiltAt": now_iso(), "source": "csv", "stats": stats}, 200
+    result = {"ok": True, "rebuiltAt": now_iso(), "source": "csv", "stats": stats}
+    write_operation_log("lottery_pool_rebuild", message="Lottery pool rebuilt", payload=result)
+    return result, 200
 
 
 def google_sheet_status():
@@ -1005,18 +1030,27 @@ def maybe_auto_sync_from_google_sheet():
     if not Config.SHEET_SYNC_ENABLED:
         return None
 
-    with get_db() as db:
-        row = db.execute(
-            "SELECT value FROM app_settings WHERE key = 'google_sheet_last_sync_at'"
-        ).fetchone()
+    try:
+        with get_db() as db:
+            row = db.execute(
+                "SELECT value FROM app_settings WHERE key = 'google_sheet_last_sync_at'"
+            ).fetchone()
 
-    if row:
-        try:
-            last_sync = datetime.fromisoformat(row["value"])
-            if now_local() - last_sync < timedelta(seconds=Config.SHEET_SYNC_INTERVAL_SECONDS):
-                return None
-        except ValueError:
-            pass
+        if row:
+            try:
+                last_sync = datetime.fromisoformat(row["value"])
+                if now_local() - last_sync < timedelta(seconds=Config.SHEET_SYNC_INTERVAL_SECONDS):
+                    return None
+            except ValueError:
+                pass
 
-    result, status_code = sync_from_google_sheet()
-    return {"statusCode": status_code, "result": result}
+        result, status_code = sync_from_google_sheet()
+        return {"statusCode": status_code, "result": result}
+    except Exception as error:
+        write_operation_log(
+            "google_sheet_auto_sync",
+            level="error",
+            message="Google Sheet auto sync failed",
+            payload={"error": str(error)},
+        )
+        return {"statusCode": 500, "result": {"ok": False, "message": str(error)}}

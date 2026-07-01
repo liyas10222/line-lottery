@@ -1,21 +1,17 @@
+import logging
 import random
-import sqlite3
 from datetime import datetime
 
 from config import Config
+from services.database import create_schema, ensure_common_columns, get_db
 from services.google_sheet_writer import mark_serial_assigned_in_sheet
+from services.operation_log_service import write_operation_log
 
 
 DEFAULT_PRIZES = []
+LOGGER = logging.getLogger(__name__)
 
 SERIAL_STATUSES = {"available", "assigned", "redeemed", "void"}
-
-
-def get_db():
-    conn = sqlite3.connect(Config.database_file())
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
 
 
 def now_local():
@@ -73,138 +69,10 @@ def validate_line_user_id(value):
     return line_user_id
 
 
-def table_columns(db, table_name):
-    return {row["name"] for row in db.execute(f"PRAGMA table_info({table_name})")}
-
-
-def ensure_column(db, table_name, column_name, definition):
-    if column_name not in table_columns(db, table_name):
-        db.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}")
-
-
 def init_db():
     with get_db() as db:
-        db.execute(
-            """
-            CREATE TABLE IF NOT EXISTS members (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                line_user_id TEXT NOT NULL UNIQUE,
-                display_name TEXT NOT NULL,
-                picture_url TEXT,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            )
-            """
-        )
-        db.execute(
-            """
-            CREATE TABLE IF NOT EXISTS prizes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                code TEXT NOT NULL UNIQUE,
-                short_label TEXT,
-                weight INTEGER NOT NULL,
-                stock INTEGER,
-                requires_serial INTEGER NOT NULL DEFAULT 0,
-                is_active INTEGER NOT NULL DEFAULT 1,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            )
-            """
-        )
-        db.execute(
-            """
-            CREATE TABLE IF NOT EXISTS lottery_records (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                line_user_id TEXT NOT NULL,
-                line_display_name TEXT,
-                prize_id INTEGER,
-                prize_serial_id INTEGER,
-                prize_name TEXT NOT NULL,
-                prize_code TEXT NOT NULL,
-                serial_code TEXT,
-                status TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                FOREIGN KEY (prize_id) REFERENCES prizes(id),
-                FOREIGN KEY (prize_serial_id) REFERENCES prize_serials(id)
-            )
-            """
-        )
-        db.execute(
-            """
-            CREATE TABLE IF NOT EXISTS daily_spin (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                line_user_id TEXT NOT NULL,
-                date TEXT NOT NULL,
-                count INTEGER NOT NULL DEFAULT 0,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                UNIQUE(line_user_id, date)
-            )
-            """
-        )
-        db.execute(
-            """
-            CREATE TABLE IF NOT EXISTS member_spin_limits (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                line_user_id TEXT NOT NULL UNIQUE,
-                daily_limit INTEGER,
-                is_blocked INTEGER NOT NULL DEFAULT 0,
-                note TEXT,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            )
-            """
-        )
-        db.execute(
-            """
-            CREATE TABLE IF NOT EXISTS prize_serials (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                prize_id INTEGER NOT NULL,
-                serial_code TEXT NOT NULL UNIQUE,
-                status TEXT NOT NULL DEFAULT 'available',
-                assigned_line_user_id TEXT,
-                assigned_display_name TEXT,
-                lottery_record_id INTEGER,
-                assigned_at TEXT,
-                checked_at TEXT,
-                checked_by TEXT,
-                source_order_no TEXT,
-                source_sheet TEXT,
-                source_row INTEGER,
-                note TEXT,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                FOREIGN KEY (prize_id) REFERENCES prizes(id),
-                FOREIGN KEY (lottery_record_id) REFERENCES lottery_records(id)
-            )
-            """
-        )
-        db.execute(
-            """
-            CREATE TABLE IF NOT EXISTS app_settings (
-                key TEXT PRIMARY KEY,
-                value TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            )
-            """
-        )
-
-        ensure_column(db, "prizes", "short_label", "TEXT")
-        ensure_column(db, "prizes", "requires_serial", "INTEGER NOT NULL DEFAULT 0")
-        ensure_column(db, "lottery_records", "prize_serial_id", "INTEGER")
-        ensure_column(db, "lottery_records", "serial_code", "TEXT")
-        ensure_column(db, "lottery_records", "line_display_name", "TEXT")
-        ensure_column(db, "prize_serials", "assigned_display_name", "TEXT")
-
-        db.execute("CREATE INDEX IF NOT EXISTS idx_members_line_user_id ON members(line_user_id)")
-        db.execute(
-            "CREATE INDEX IF NOT EXISTS idx_lottery_records_user_created ON lottery_records(line_user_id, created_at)"
-        )
-        db.execute("CREATE INDEX IF NOT EXISTS idx_daily_spin_user_date ON daily_spin(line_user_id, date)")
-        db.execute("CREATE INDEX IF NOT EXISTS idx_prize_serials_prize_status ON prize_serials(prize_id, status)")
-        db.execute("CREATE INDEX IF NOT EXISTS idx_prize_serials_assigned_user ON prize_serials(assigned_line_user_id)")
+        create_schema(db)
+        ensure_common_columns(db)
 
         timestamp = now_iso()
         for name, code, short_label, weight, stock, active, requires_serial in DEFAULT_PRIZES:
@@ -433,17 +301,26 @@ def reserve_prize_serial(db, prize, line_user_id, line_display_name, timestamp):
     if not prize["requires_serial"]:
         return None
 
-    serial = db.execute(
-        """
+    sql = """
         SELECT id, serial_code, source_sheet, source_row
         FROM prize_serials
         WHERE prize_id = ?
           AND status = 'available'
         ORDER BY id ASC
         LIMIT 1
-        """,
-        (prize["id"],),
-    ).fetchone()
+        """
+    if db.is_postgres:
+        sql = """
+        SELECT id, serial_code, source_sheet, source_row
+        FROM prize_serials
+        WHERE prize_id = ?
+          AND status = 'available'
+        ORDER BY id ASC
+        LIMIT 1
+        FOR UPDATE SKIP LOCKED
+        """
+
+    serial = db.execute(sql, (prize["id"],)).fetchone()
     if serial is None:
         return None
 
@@ -472,7 +349,7 @@ def spin_lottery(payload):
     db = get_db()
     sheet_writeback = None
     try:
-        db.execute("BEGIN IMMEDIATE")
+        db.begin_immediate()
 
         timestamp = now_iso()
         member = db.execute(
@@ -506,7 +383,7 @@ def spin_lottery(payload):
             return {"ok": False, "message": "此獎項序號已用完"}, 409
 
         status = "not_won" if prize["code"] == "NONE" else "won"
-        cursor = db.execute(
+        cursor = db.execute_insert(
             """
             INSERT INTO lottery_records
                 (
@@ -575,20 +452,52 @@ def spin_lottery(payload):
             )
 
         db.commit()
-    except sqlite3.Error:
+    except Exception:
         db.rollback()
         raise
     finally:
         db.close()
 
-    sheet_writeback_result = None
+    write_operation_log(
+        "lottery_spin_success",
+        line_user_id=line_user_id,
+        message="Lottery spin committed",
+        payload={
+            "recordId": record_id,
+            "prizeId": prize["id"],
+            "prizeCode": prize["code"],
+            "prizeName": prize["name"],
+            "serialCode": serial["serial_code"] if serial else None,
+            "status": status,
+        },
+    )
+
+    sheet_writeback_result = {"ok": True, "skipped": True, "message": "No serial writeback required"}
     if sheet_writeback:
-        sheet_writeback_result = mark_serial_assigned_in_sheet(
-            sheet_writeback,
-            sheet_writeback["line_user_id"],
-            sheet_writeback["line_display_name"],
-            sheet_writeback["lottery_record_id"],
-            sheet_writeback["assigned_at"],
+        try:
+            sheet_writeback_result = mark_serial_assigned_in_sheet(
+                sheet_writeback,
+                sheet_writeback["line_user_id"],
+                sheet_writeback["line_display_name"],
+                sheet_writeback["lottery_record_id"],
+                sheet_writeback["assigned_at"],
+            )
+        except Exception as error:
+            LOGGER.exception("Google Sheet writeback failed after committed spin")
+            sheet_writeback_result = {"ok": False, "message": str(error)}
+
+        write_operation_log(
+            "google_sheet_writeback",
+            level="info" if sheet_writeback_result.get("ok") else "error",
+            line_user_id=line_user_id,
+            message="Google Sheet writeback completed"
+            if sheet_writeback_result.get("ok")
+            else "Google Sheet writeback failed",
+            payload={
+                "recordId": record_id,
+                "serialCode": sheet_writeback.get("serial_code"),
+                "result": sheet_writeback_result,
+            },
         )
 
     return {

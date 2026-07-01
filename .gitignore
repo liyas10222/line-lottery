@@ -9,4 +9,5 @@ venv/
 bot-line-*.json
 *service-account*.json
 credentials*.json
+*backup*.json
 ngrok.exe
