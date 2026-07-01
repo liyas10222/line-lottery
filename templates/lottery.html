@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LINE 會員抽獎</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <script>
+    window.LINE_LOTTERY_CONFIG = {
+      liffId: "{{ liff_id }}"
+    };
+  </script>
+</head>
+<body data-page="lottery">
+  <main class="app-shell">
+    <section class="lottery-layout" aria-live="polite">
+      <div class="profile-panel">
+        <div class="profile-row">
+          <img id="avatar" class="avatar" alt="LINE 頭像" src="">
+          <div class="profile-copy">
+            <p class="eyebrow">會員抽獎</p>
+            <h1 id="displayName">會員登入中</h1>
+            <p id="userId" class="user-id">userId：讀取中</p>
+          </div>
+        </div>
+
+        <div class="quota-box">
+          <span>今日剩餘抽獎次數</span>
+          <strong id="remaining">-</strong>
+        </div>
+
+        <div id="message" class="message">正在連線 LINE 會員登入...</div>
+
+        <div class="actions">
+          <button id="spinButton" class="primary-button" type="button" disabled>開始抽獎</button>
+          <button id="historyButton" class="ghost-button" type="button">我的中獎紀錄</button>
+          <button id="adminButton" class="ghost-button admin-only" type="button" hidden>管理功能</button>
+        </div>
+      </div>
+
+      <div class="wheel-panel">
+        <div class="wheel-wrap">
+          <div class="pointer" aria-hidden="true"></div>
+          <div id="wheel" class="wheel" aria-hidden="true"></div>
+        </div>
+        <div id="result" class="result-box">
+          <span>抽獎結果</span>
+          <strong>尚未抽獎</strong>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

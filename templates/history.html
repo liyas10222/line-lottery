@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>我的中獎紀錄</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <script>
+    window.LINE_LOTTERY_CONFIG = {
+      liffId: "{{ liff_id }}"
+    };
+  </script>
+</head>
+<body data-page="history">
+  <main class="app-shell">
+    <section class="history-layout">
+      <div class="history-header">
+        <div>
+          <p class="eyebrow">會員抽獎</p>
+          <h1>我的中獎紀錄</h1>
+          <p id="historyUser" class="user-id">讀取中</p>
+        </div>
+        <button id="backButton" class="ghost-button" type="button">返回抽獎</button>
+      </div>
+
+      <div id="historyMessage" class="message">正在讀取紀錄...</div>
+
+      <div class="table-wrap">
+        <table class="history-table">
+          <thead>
+            <tr>
+              <th>獎品名稱</th>
+              <th>抽獎時間</th>
+              <th>狀態</th>
+            </tr>
+          </thead>
+          <tbody id="historyBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
