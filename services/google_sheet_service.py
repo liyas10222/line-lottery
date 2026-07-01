@@ -175,22 +175,44 @@ def service_account_path():
 
 
 def service_account_summary():
+    if Config.GOOGLE_SERVICE_ACCOUNT_JSON:
+        try:
+            data = json.loads(Config.GOOGLE_SERVICE_ACCOUNT_JSON)
+        except json.JSONDecodeError:
+            return {
+                "configured": True,
+                "exists": False,
+                "clientEmail": None,
+                "projectId": None,
+                "source": "env_json",
+                "error": "GOOGLE_SERVICE_ACCOUNT_JSON 不是合法 JSON",
+            }
+
+        return {
+            "configured": True,
+            "exists": True,
+            "clientEmail": data.get("client_email"),
+            "projectId": data.get("project_id"),
+            "source": "env_json",
+        }
+
     path = service_account_path()
     if not path:
-        return {"configured": False, "exists": False, "clientEmail": None, "projectId": None}
+        return {"configured": False, "exists": False, "clientEmail": None, "projectId": None, "source": "none"}
     if not path.exists():
-        return {"configured": True, "exists": False, "clientEmail": None, "projectId": None}
+        return {"configured": True, "exists": False, "clientEmail": None, "projectId": None, "source": "file"}
 
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return {"configured": True, "exists": True, "clientEmail": None, "projectId": None}
+        return {"configured": True, "exists": True, "clientEmail": None, "projectId": None, "source": "file"}
 
     return {
         "configured": True,
         "exists": True,
         "clientEmail": data.get("client_email"),
         "projectId": data.get("project_id"),
+        "source": "file",
     }
 
 
