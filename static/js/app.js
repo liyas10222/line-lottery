@@ -1,14 +1,37 @@
 const DEFAULT_SEGMENTS = [
+  { code: "NONE", name: "銘謝惠顧", shortLabel: "銘謝惠顧" },
+  { code: "MYSTERY_GIFT", name: "神秘小禮物", shortLabel: "神秘小禮物" },
   { code: "COUPON30", name: "30元折價券", shortLabel: "30元" },
-  { code: "COUPON170", name: "170元折價券", shortLabel: "170元" },
-  { code: "COUPON990", name: "990元折價券", shortLabel: "990元" },
-  { code: "COUPON1690", name: "1690元折價券", shortLabel: "1690元" },
-  { code: "COUPON3280", name: "3280元折價券", shortLabel: "3280元" },
-  { code: "IPHONE16", name: "iPhone 16", shortLabel: "iPhone" },
-  { code: "THANKS", name: "銘謝惠顧", shortLabel: "銘謝" },
+  { code: "COUPON170", name: "原價170商品兌換劵", shortLabel: "170兌換" },
+  { code: "COUPON990", name: "原價990商品兌換劵", shortLabel: "990兌換" },
+  { code: "COUPON1690", name: "原價1690商品兌換劵", shortLabel: "1690兌換" },
+  { code: "COUPON3280", name: "原價3290商品兌換劵", shortLabel: "3290兌換" },
+  { code: "AIRPODS_PRO3", name: "AirPods Pro3", shortLabel: "AirPods" },
+  { code: "SWITCH2_MARIOKART", name: "Nintendo 任天堂 Switch 2 瑪利歐賽車世界組合包", shortLabel: "Switch 2" },
+  { code: "IPHONE16", name: "iPhone 17 256GB", shortLabel: "iPhone 17" },
 ];
 
 const WHEEL_COLORS = ["#4ec9d8", "#f6c85f", "#ff6b70", "#8f63f4", "#7d8da3", "#29d76b", "#39b782", "#f08c4a"];
+const PRIZE_IMAGE_BY_CODE = {
+  AIRPODS_PRO3: "/static/images/prizes/airpods-pro3.png",
+  SWITCH2_MARIOKART: "/static/images/prizes/switch-2-mariokart.png",
+  IPHONE16: "/static/images/prizes/iphone-17.png",
+  IPHONE17_256: "/static/images/prizes/iphone-17.png",
+};
+const WHEEL_LABEL_LINES = {
+  NONE: ["銘謝惠顧"],
+  THANKS: ["銘謝惠顧"],
+  MYSTERY_GIFT: ["神秘", "小禮物"],
+  COUPON30: ["30元", "折價券"],
+  COUPON170: ["原價170", "商品兌換劵"],
+  COUPON990: ["原價990", "商品兌換劵"],
+  COUPON1690: ["原價1690", "商品兌換劵"],
+  COUPON3280: ["原價3290", "商品兌換劵"],
+  AIRPODS_PRO3: ["AirPods", "Pro3"],
+  SWITCH2_MARIOKART: ["Nintendo", "Switch 2", "瑪利歐賽車", "世界組合包"],
+  IPHONE16: ["iPhone 17", "256GB"],
+  IPHONE17_256: ["iPhone 17", "256GB"],
+};
 const REDEEM_NOTICE = "請截圖保存中獎序號，並將中獎序號提供給鮭魚代儲官方 LINE 兌換獎品喔！";
 const HISTORY_PAGE_SIZE = 10;
 
@@ -182,6 +205,7 @@ async function loadPrizeSegments() {
           code: prize.code,
           name: prize.name,
           shortLabel: prize.shortLabel || prize.name,
+          imageUrl: prizeImageUrl(prize.code),
         }));
     }
   } catch (error) {
@@ -378,14 +402,14 @@ function renderWheel() {
   const wheel = document.getElementById("wheel");
   if (!wheel) return;
 
-  const size = 420;
+  const size = 520;
   const center = size / 2;
-  const radius = 198;
-  const labelRadius = segments.length >= 8 ? 130 : 136;
+  const radius = 244;
+  const slotRadius = segments.length >= 8 ? 155 : 164;
   const slice = 360 / segments.length;
-  const labelFontSize = segments.length >= 10 ? 11 : segments.length >= 8 ? 12 : 14;
+  const labelFontSize = segments.length >= 10 ? 9.6 : segments.length >= 8 ? 11.6 : 13.5;
   const paths = [];
-  const labels = [];
+  const slots = [];
 
   segments.forEach((segment, index) => {
     const start = -90 - slice / 2 + index * slice;
@@ -396,35 +420,65 @@ function renderWheel() {
 
     paths.push(`<path d="${sectorPath(center, center, radius, start, end)}" fill="${color}" stroke="rgba(255,255,255,.26)" stroke-width="2"></path>`);
 
-    const labelPoint = polarToCartesian(center, center, labelRadius, labelAngle);
-    const lines = labelLines(segment.shortLabel || segment.name);
-    labels.push(`
+    const slotPoint = polarToCartesian(center, center, slotRadius, labelAngle);
+    const lines = wheelLabelLines(segment);
+    const imageUrl = segment.imageUrl || prizeImageUrl(segment.code);
+    const imageSize = segments.length >= 10 ? 38 : 48;
+    const textLineHeight = labelFontSize + 1.8;
+    const textHeight = lines.length * textLineHeight;
+    const gap = imageUrl ? 6 : 0;
+    const blockHeight = (imageUrl ? imageSize : 0) + gap + textHeight;
+    const blockTop = slotPoint.y - blockHeight / 2;
+    const textY = blockTop + (imageUrl ? imageSize + gap : 0) + labelFontSize / 2;
+
+    slots.push(`
+      ${imageUrl ? `
+        <image
+          class="wheel-prize-image"
+          href="${escapeHtml(imageUrl)}"
+          x="${slotPoint.x - imageSize / 2}"
+          y="${blockTop}"
+          width="${imageSize}"
+          height="${imageSize}"
+          preserveAspectRatio="xMidYMid meet"
+        ></image>
+      ` : ""}
       <text
-        x="${labelPoint.x}"
-        y="${labelPoint.y - ((lines.length - 1) * labelFontSize) / 2}"
+        class="wheel-label"
+        x="${slotPoint.x}"
+        y="${textY}"
         fill="${textColor}"
         font-size="${labelFontSize}"
         font-weight="800"
         text-anchor="middle"
         dominant-baseline="middle"
-      >${lines.map((line, lineIndex) => `<tspan x="${labelPoint.x}" dy="${lineIndex === 0 ? 0 : labelFontSize + 2}">${escapeHtml(line)}</tspan>`).join("")}</text>
+      >${lines.map((line, lineIndex) => `<tspan x="${slotPoint.x}" dy="${lineIndex === 0 ? 0 : textLineHeight}">${escapeHtml(line)}</tspan>`).join("")}</text>
     `);
   });
 
   wheel.innerHTML = `
     <svg class="wheel-svg" viewBox="0 0 ${size} ${size}" role="img" aria-label="抽獎轉盤">
       <g>${paths.join("")}</g>
-      <g class="wheel-labels">${labels.join("")}</g>
-      <circle cx="${center}" cy="${center}" r="58" fill="#111a26" stroke="rgba(255,255,255,.2)" stroke-width="8"></circle>
+      <g class="wheel-slots">${slots.join("")}</g>
+      <circle cx="${center}" cy="${center}" r="62" fill="#111a26" stroke="rgba(255,255,255,.2)" stroke-width="8"></circle>
     </svg>
   `;
 }
 
+function prizeImageUrl(code) {
+  return PRIZE_IMAGE_BY_CODE[String(code || "").toUpperCase()] || "";
+}
+
+function wheelLabelLines(segment) {
+  const code = String(segment?.code || "").toUpperCase();
+  return WHEEL_LABEL_LINES[code] || labelLines(segment?.name || segment?.shortLabel || "");
+}
+
 function labelLines(value) {
   const text = String(value || "").trim();
-  if (text.length <= 5) return [text];
-  if (text.length <= 9) return [text.slice(0, 4), text.slice(4)];
-  return [text.slice(0, 4), text.slice(4, 9), text.slice(9, 14)];
+  if (text.length <= 6) return [text];
+  if (text.length <= 12) return [text.slice(0, 6), text.slice(6)];
+  return [text.slice(0, 6), text.slice(6, 12), text.slice(12, 18)];
 }
 
 function sectorPath(cx, cy, radius, startAngle, endAngle) {
