@@ -45,6 +45,16 @@
 
         <div id="message" class="message">正在初始化 LIFF...</div>
 
+      </div>
+
+      <div class="wheel-panel">
+        <div class="wheel-wrap">
+          <div class="pointer" aria-hidden="true"></div>
+          <div id="wheel" class="wheel" aria-hidden="true"></div>
+        </div>
+      </div>
+
+      <div class="lottery-controls-panel">
         <div class="actions">
           <button id="spinButton" class="primary-button" type="button" disabled>開始抽獎</button>
           <button id="bulkDrawButton" class="primary-button secondary-primary-button" type="button" disabled>10 抽</button>
@@ -58,15 +68,9 @@
         </label>
       </div>
 
-      <div class="wheel-panel">
-        <div class="wheel-wrap">
-          <div class="pointer" aria-hidden="true"></div>
-          <div id="wheel" class="wheel" aria-hidden="true"></div>
-        </div>
-        <div id="result" class="result-box">
-          <span>抽獎結果</span>
-          <strong>尚未抽獎</strong>
-        </div>
+      <div id="result" class="result-box single-result-box">
+        <span>抽獎結果</span>
+        <strong>尚未抽獎</strong>
       </div>
     </section>
 
@@ -74,10 +78,39 @@
       <details>
         <summary>活動規則</summary>
         <div class="rules-content">
-          <p>每個 LINE 帳號每日可依活動設定抽獎，實際次數以系統後台紀錄為準。</p>
-          <p>獎項、權重、序號與啟用狀態由後台與 Google Sheet 控制，抽獎結果由伺服器決定。</p>
-          <p>抽中獎品後請截圖保存中獎序號，並將序號提供給鮭魚代儲官方 LINE 兌換。</p>
-          <p>序號一經抽出會立即登記，不會再次出現在獎池中。</p>
+          <article class="rules-official">
+            <h2>鮭魚代儲抽獎活動規則</h2>
+
+            <h3>一、活動參加方式</h3>
+            <p>凡於活動期間內，透過鮭魚代儲完成符合資格之消費訂單，即有機會獲得抽獎次數。每消費滿 2000 元，可獲得抽獎次數 1 次。</p>
+
+            <h3>二、會員登入與抽獎資格</h3>
+            <p>參加活動前，請先使用 LINE 登入活動頁面完成會員綁定。若尚未登入活動頁面，系統將無法取得會員資料，也就無法正常發放抽獎次數。</p>
+
+            <h3>三、抽獎次數發放</h3>
+            <p>符合資格之訂單，抽獎次數原則上將於訂單成立後隔日發放。實際發放時間可能依訂單確認、系統作業或活動狀況調整。</p>
+
+            <h3>四、抽獎次數規則</h3>
+            <p>會員預設抽獎次數為 0 次。抽獎次數不會每日自動重置，也不會每日自動贈送。抽獎次數需透過符合資格之消費訂單、官方活動或管理員補發取得。</p>
+
+            <h3>五、中獎與兌換方式</h3>
+            <p>中獎後，系統將顯示中獎獎項與中獎序號。請截圖保存中獎畫面，並將中獎序號提供給鮭魚代儲官方 LINE 客服兌換獎品。</p>
+
+            <h3>六、獎項數量與機率</h3>
+            <p>各獎項數量有限，抽完為止。若部分獎項已全數抽出，該獎項將不再發放，其原機率將歸入「銘謝惠顧」，不會提高其他獎項之中獎率。</p>
+
+            <h3>七、獎項發放</h3>
+            <p>獎項內容、兌換方式、兌換期限與實際發放方式，請依鮭魚代儲官方 LINE 客服回覆為準。部分獎項可能需經人工確認後發放。</p>
+
+            <h3>八、異常與違規處理</h3>
+            <p>若系統偵測到異常操作、重複領取、冒用身份、惡意操作、利用漏洞或其他影響活動公平性之行為，鮭魚代儲有權取消相關抽獎資格、中獎資格或獎項發放。</p>
+
+            <h3>九、活動調整權利</h3>
+            <p>鮭魚代儲保留本活動之最終解釋、修改、暫停、終止及獎項發放審核之權利。若遇系統異常、資料異常、不可抗力或其他未盡事宜，鮭魚代儲有權依實際情況進行調整。</p>
+
+            <h3>十、官方 LINE 兌換提醒</h3>
+            <p>所有中獎獎項皆需憑中獎序號至鮭魚代儲官方 LINE 進行兌換。請務必妥善保存中獎序號，遺失、截圖不完整或無法確認者，可能影響兌換權益。</p>
+          </article>
         </div>
       </details>
     </section>

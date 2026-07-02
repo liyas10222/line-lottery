@@ -320,7 +320,7 @@ async function spinLottery() {
     if (!shouldSkipAnimation()) {
       await animateWheel(data.prize.code);
     }
-    renderResult(data.prize);
+    renderSingleDrawResult(data.prize);
     await refreshStatus();
   } catch (error) {
     console.error(error);
@@ -474,7 +474,7 @@ function isThanksPrizeCode(code) {
   return ["NONE", "THANKS"].includes(String(code || "").toUpperCase());
 }
 
-function renderResult(prize) {
+function renderSingleDrawResult(prize) {
   const result = document.getElementById("result");
   const isThanks = isThanksPrizeCode(prize.code) || prize.status === "not_won";
   const codeText = prize.serialCode || prize.code || "";
@@ -484,6 +484,7 @@ function renderResult(prize) {
     : "";
   const notice = isThanks ? "" : `<p class="redeem-notice">${escapeHtml(REDEEM_NOTICE)}</p>`;
 
+  result.className = "result-box single-result-box";
   result.innerHTML = `
     <span>${escapeHtml(statusText)}</span>
     <strong>${escapeHtml(prize.name)}</strong>
@@ -497,25 +498,28 @@ function renderBulkResults(data) {
   const result = document.getElementById("result");
   const rows = data.results.map((item) => {
     const isThanks = isThanksPrizeCode(item.prizeCode) || item.status === "not_won";
-    const serialText = item.serialCode ? `｜${item.serialCode}` : "";
     const copyButton = item.serialCode
       ? `<button class="copy-code-button" data-copy-code="${escapeHtml(item.serialCode)}" type="button">複製序號</button>`
       : "";
     return `
       <li class="bulk-result-item">
         <div class="bulk-result-line">
-          <span>${item.index}. ${escapeHtml(item.prizeName)}${escapeHtml(serialText)}</span>
+          <strong>${item.index}. ${escapeHtml(item.prizeName)}</strong>
           ${copyButton}
         </div>
-        ${isThanks ? "" : `<p class="redeem-notice">${escapeHtml(REDEEM_NOTICE)}</p>`}
+        ${item.serialCode ? `<div class="serial-code-row"><span>序號：${escapeHtml(item.serialCode)}</span></div>` : ""}
+        ${isThanks || !item.serialCode ? "" : `<p class="redeem-notice compact-redeem-notice">憑中獎序號至官方 LINE 兌換。</p>`}
       </li>
     `;
   }).join("");
 
+  result.className = "result-box draw-result-panel";
   result.innerHTML = `
-    <span>本次 10 抽結果</span>
-    <strong>${data.successCount || data.results.length} 筆完成</strong>
-    <ol class="bulk-result-list">${rows}</ol>
+    <div class="draw-result-header">
+      <span>本次 10 抽結果</span>
+      <strong>${data.successCount || data.results.length} 筆完成</strong>
+    </div>
+    <ol class="draw-result-list">${rows}</ol>
   `;
   setMessage(data.ok ? `10 抽完成，剩餘 ${data.remainingSpins} 次。` : "10 抽部分失敗，請查看結果列表。", !data.ok);
 }
