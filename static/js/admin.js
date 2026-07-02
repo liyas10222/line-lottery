@@ -4,6 +4,8 @@ const adminState = {
   profile: null,
   isAdmin: false,
   members: new Map(),
+  csvText: "",
+  csvPreviewOk: false,
 };
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -42,6 +44,10 @@ function bindAdmin() {
   document.getElementById("loadWritebackFailuresButton").addEventListener("click", loadWritebackFailures);
   document.getElementById("loadOperationLogsButton").addEventListener("click", loadOperationLogs);
   document.getElementById("exportBackupButton").addEventListener("click", exportBackup);
+  document.getElementById("downloadCsvTemplateButton").addEventListener("click", downloadCsvTemplate);
+  document.getElementById("csvImportFile").addEventListener("change", handleCsvFileChange);
+  document.getElementById("previewCsvImportButton").addEventListener("click", previewCsvImport);
+  document.getElementById("confirmCsvImportButton").addEventListener("click", confirmCsvImport);
 }
 
 async function initAdminPage() {
@@ -177,6 +183,43 @@ async function adminFetch(url, options = {}) {
     throw new Error(data.message || `HTTP ${response.status}`);
   }
   return data;
+}
+
+async function adminRawFetch(url, options = {}) {
+  const token = adminState.token || document.getElementById("adminToken").value.trim();
+  if (!token) {
+    throw new Error("請先輸入 Admin Token。");
+  }
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      "X-Admin-Token": token,
+      "X-Admin-Line-User-Id": adminState.profile?.lineUserId || "",
+      ...(options.headers || {}),
+    },
+  });
+  if (!response.ok) {
+    throw new Error(await response.text() || `HTTP ${response.status}`);
+  }
+  return response;
+}
+
+async function adminJsonFetchAllowError(url, options = {}) {
+  const token = adminState.token || document.getElementById("adminToken").value.trim();
+  if (!token) {
+    throw new Error("請先輸入 Admin Token。");
+  }
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      "X-Admin-Token": token,
+      "X-Admin-Line-User-Id": adminState.profile?.lineUserId || "",
+      ...(options.headers || {}),
+    },
+  });
+  const data = await response.json();
+  return { response, data };
 }
 
 async function syncMember(profile) {
@@ -447,6 +490,100 @@ async function exportBackup() {
   }
 }
 
+async function downloadCsvTemplate() {
+  try {
+    const response = await adminRawFetch("/api/admin/prizes/import-template");
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "lottery_prize_import_sample.csv";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    setAdminMessage("CSV 範例已下載。");
+  } catch (error) {
+    showError(error);
+  }
+}
+
+async function handleCsvFileChange(event) {
+  const file = event.target.files?.[0];
+  adminState.csvText = "";
+  adminState.csvPreviewOk = false;
+  document.getElementById("confirmCsvImportButton").disabled = true;
+
+  if (!file) {
+    document.getElementById("csvFileName").textContent = "尚未選擇 CSV 檔案";
+    setOutput("csvImportOutput", {});
+    return;
+  }
+
+  document.getElementById("csvFileName").textContent = `${file.name} / ${Math.round(file.size / 1024)} KB`;
+  adminState.csvText = await file.text();
+  setAdminMessage("CSV 檔案已載入，請先預覽 / 驗證。");
+}
+
+async function previewCsvImport() {
+  if (!adminState.csvText) {
+    setAdminMessage("請先選擇 CSV 檔案。", true);
+    return;
+  }
+
+  try {
+    const { response, data } = await adminJsonFetchAllowError("/api/admin/prizes/import-preview", {
+      method: "POST",
+      body: JSON.stringify({ csvText: adminState.csvText }),
+    });
+    adminState.csvPreviewOk = data.ok;
+    document.getElementById("confirmCsvImportButton").disabled = !data.ok;
+    setOutput("csvImportOutput", data.summary);
+    setAdminMessage(
+      data.ok ? formatImportSummary("CSV 驗證通過", data.summary) : formatImportSummary("CSV 驗證失敗", data.summary),
+      !response.ok || !data.ok,
+    );
+  } catch (error) {
+    adminState.csvPreviewOk = false;
+    document.getElementById("confirmCsvImportButton").disabled = true;
+    setOutput("csvImportOutput", { ok: false, message: error.message });
+    showError(error);
+  }
+}
+
+async function confirmCsvImport() {
+  if (!adminState.csvText || !adminState.csvPreviewOk) {
+    setAdminMessage("請先完成 CSV 預覽 / 驗證。", true);
+    return;
+  }
+  if (!window.confirm("確認匯入這份 CSV？此操作不會清空抽獎紀錄，也不會重置已抽中序號。")) return;
+
+  try {
+    const data = await adminFetch("/api/admin/prizes/import", {
+      method: "POST",
+      body: JSON.stringify({ confirm: "IMPORT_PRIZE_CSV", csvText: adminState.csvText }),
+    });
+    setOutput("csvImportOutput", data.summary);
+    setAdminMessage(formatImportSummary("匯入完成", data.summary));
+    adminState.csvPreviewOk = false;
+    document.getElementById("confirmCsvImportButton").disabled = true;
+    await loadPrizes();
+  } catch (error) {
+    showError(error);
+  }
+}
+
+function formatImportSummary(prefix, summary = {}) {
+  return [
+    prefix,
+    `新增 ${summary.newPrizeCount || 0} 個獎項`,
+    `更新 ${summary.updatePrizeCount || 0} 個獎項`,
+    `新增 ${summary.newSerialCount || 0} 組序號`,
+    `略過重複 ${summary.skippedExistingSerialCount || 0} 組`,
+    `錯誤列 ${summary.errorRowCount || 0} 列`,
+  ].join("，");
+}
+
 async function loadPrizes() {
   try {
     const data = await adminFetch("/api/admin/prizes");
@@ -461,7 +598,8 @@ async function loadPrizes() {
 function renderPrizeRow(prize) {
   const remainingText = prize.remainingQuantity === null || prize.remainingQuantity === undefined ? "不限" : prize.remainingQuantity;
   const totalText = prize.totalQuantity === null || prize.totalQuantity === undefined ? "未設定" : prize.totalQuantity;
-  const transferText = prize.code === "NONE" && prize.transferredWeightToNone > 0
+  const isThanksPrize = ["NONE", "THANKS"].includes(String(prize.code || "").toUpperCase()) || String(prize.name || "").includes("銘謝");
+  const transferText = isThanksPrize && prize.transferredWeightToNone > 0
     ? `<span>承接抽光權重 ${formatNumber(prize.transferredWeightToNone)}</span>`
     : "";
 

@@ -1,15 +1,16 @@
 const DEFAULT_SEGMENTS = [
-  { code: "COUPON30", name: "30折價券", shortLabel: "30券" },
-  { code: "COUPON170", name: "170折價券", shortLabel: "170券" },
-  { code: "COUPON990", name: "990折價券", shortLabel: "990券" },
-  { code: "COUPON1690", name: "1690折價券", shortLabel: "1690券" },
-  { code: "COUPON3280", name: "3280折價券", shortLabel: "3280券" },
+  { code: "COUPON30", name: "30元折價券", shortLabel: "30元" },
+  { code: "COUPON170", name: "170元折價券", shortLabel: "170元" },
+  { code: "COUPON990", name: "990元折價券", shortLabel: "990元" },
+  { code: "COUPON1690", name: "1690元折價券", shortLabel: "1690元" },
+  { code: "COUPON3280", name: "3280元折價券", shortLabel: "3280元" },
   { code: "IPHONE16", name: "iPhone 16", shortLabel: "iPhone" },
-  { code: "NONE", name: "銘謝惠顧", shortLabel: "銘謝" },
+  { code: "THANKS", name: "銘謝惠顧", shortLabel: "銘謝" },
 ];
 
 const WHEEL_COLORS = ["#4ec9d8", "#f6c85f", "#ff6b70", "#8f63f4", "#7d8da3", "#29d76b", "#39b782", "#f08c4a"];
 const REDEEM_NOTICE = "請截圖保存中獎序號，並將中獎序號提供給鮭魚代儲官方 LINE 兌換獎品喔！";
+const HISTORY_PAGE_SIZE = 10;
 
 let segments = [...DEFAULT_SEGMENTS];
 
@@ -17,7 +18,10 @@ const state = {
   liffReady: false,
   profile: null,
   canSpin: false,
+  remaining: 0,
   spinning: false,
+  historyRecords: [],
+  historyPage: 1,
 };
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -48,6 +52,7 @@ async function initHistoryPage() {
   document.getElementById("backButton").addEventListener("click", () => {
     window.location.href = "/lottery";
   });
+  document.getElementById("historyPagination").addEventListener("click", handleHistoryPagination);
 
   await initLiff();
   const profile = await loadLineProfile({ allowStoredProfile: true });
@@ -65,6 +70,8 @@ function bindLotteryButtons() {
   document.getElementById("loginButton").addEventListener("click", loginWithLine);
   document.getElementById("logoutButton").addEventListener("click", logoutLine);
   document.getElementById("spinButton").addEventListener("click", spinLottery);
+  document.getElementById("bulkDrawButton").addEventListener("click", bulkDrawLottery);
+  document.getElementById("result").addEventListener("click", handleResultClick);
   document.getElementById("historyButton").addEventListener("click", () => {
     window.location.href = "/history";
   });
@@ -111,6 +118,7 @@ function logoutLine() {
   sessionStorage.removeItem("lineLotteryProfile");
   state.profile = null;
   state.canSpin = false;
+  state.remaining = 0;
   renderLoggedOut();
   setMessage("已登出 LINE。");
 }
@@ -137,14 +145,13 @@ async function completeLogin() {
 }
 
 function renderLoggedOut() {
-  const loggedOut = document.getElementById("authLoggedOut");
-  const loggedIn = document.getElementById("authLoggedIn");
-  loggedOut.hidden = false;
-  loggedIn.hidden = true;
+  document.getElementById("authLoggedOut").hidden = false;
+  document.getElementById("authLoggedIn").hidden = true;
   document.getElementById("adminButton").hidden = true;
   document.getElementById("remaining").textContent = "-";
   state.canSpin = false;
-  updateSpinButton();
+  state.remaining = 0;
+  updateSpinButtons();
   setMessage("請先使用 LINE 登入後再開始抽獎。");
 }
 
@@ -251,30 +258,46 @@ async function refreshStatus() {
   }
 
   state.canSpin = data.canSpin;
-  document.getElementById("remaining").textContent = String(data.remaining);
-  updateSpinButton();
+  state.remaining = Number(data.remaining || 0);
+  document.getElementById("remaining").textContent = String(state.remaining);
+  updateSpinButtons();
 
   if (data.isBlocked) {
     setMessage("此會員目前無法抽獎。", true);
   } else {
-    setMessage(data.canSpin ? `今天還可以抽 ${data.remaining} 次。` : "今日已抽過。", !data.canSpin);
+    setMessage(data.canSpin ? `今天還可以抽 ${state.remaining} 次。` : "今日已抽過。", !data.canSpin);
   }
 }
 
-function updateSpinButton() {
-  const button = document.getElementById("spinButton");
-  button.disabled = !state.profile || !state.canSpin || state.spinning;
-  button.textContent = state.spinning ? "抽獎中..." : state.canSpin ? "開始抽獎" : "今日已抽過";
-  if (!state.profile) {
-    button.textContent = "請先登入";
+function updateSpinButtons() {
+  const spinButton = document.getElementById("spinButton");
+  const bulkButton = document.getElementById("bulkDrawButton");
+  const loggedIn = Boolean(state.profile);
+  const canSingle = loggedIn && state.remaining >= 1 && !state.spinning;
+  const canBulk = loggedIn && state.remaining >= 10 && !state.spinning;
+
+  spinButton.disabled = !canSingle;
+  bulkButton.disabled = !canBulk;
+
+  if (!loggedIn) {
+    spinButton.textContent = "請先登入";
+    bulkButton.textContent = "10 抽";
+    return;
   }
+
+  spinButton.textContent = state.spinning ? "抽獎中..." : state.remaining >= 1 ? "開始抽獎" : "今日已抽過";
+  bulkButton.textContent = state.remaining >= 10 ? "10 抽" : "抽獎次數不足 10 次";
+}
+
+function shouldSkipAnimation() {
+  return Boolean(document.getElementById("skipAnimation")?.checked);
 }
 
 async function spinLottery() {
-  if (!state.profile || !state.canSpin || state.spinning) return;
+  if (!state.profile || state.remaining < 1 || state.spinning) return;
 
   state.spinning = true;
-  updateSpinButton();
+  updateSpinButtons();
   setMessage("轉盤轉動中...");
 
   try {
@@ -294,7 +317,9 @@ async function spinLottery() {
       return;
     }
 
-    await animateWheel(data.prize.code);
+    if (!shouldSkipAnimation()) {
+      await animateWheel(data.prize.code);
+    }
     renderResult(data.prize);
     await refreshStatus();
   } catch (error) {
@@ -302,7 +327,50 @@ async function spinLottery() {
     setMessage("系統忙碌中，請稍後再試。", true);
   } finally {
     state.spinning = false;
-    updateSpinButton();
+    updateSpinButtons();
+  }
+}
+
+async function bulkDrawLottery() {
+  if (!state.profile || state.remaining < 10 || state.spinning) {
+    setMessage("抽獎次數不足 10 次。", true);
+    return;
+  }
+
+  state.spinning = true;
+  updateSpinButtons();
+  setMessage("正在執行 10 抽...");
+
+  try {
+    const response = await fetch("/api/lottery/draw-bulk", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        lineUserId: state.profile.lineUserId,
+        displayName: state.profile.displayName,
+        count: 10,
+        skipAnimation: shouldSkipAnimation(),
+      }),
+    });
+    const data = await response.json();
+
+    if (!data.ok && !Array.isArray(data.results)) {
+      setMessage(data.message || "10 抽失敗", true);
+      await refreshStatus();
+      return;
+    }
+
+    if (!shouldSkipAnimation() && data.results.length > 0) {
+      await animateWheel(data.results[0].prizeCode, { durationMs: 1600, spins: 3 });
+    }
+    renderBulkResults(data);
+    await refreshStatus();
+  } catch (error) {
+    console.error(error);
+    setMessage("10 抽失敗，請稍後再試。", true);
+  } finally {
+    state.spinning = false;
+    updateSpinButtons();
   }
 }
 
@@ -380,12 +448,14 @@ function polarToCartesian(cx, cy, radius, angleInDegrees) {
   };
 }
 
-function animateWheel(prizeCode) {
+function animateWheel(prizeCode, options = {}) {
   const wheel = document.getElementById("wheel");
+  const durationMs = options.durationMs || 3600;
+  const spins = options.spins || 7;
   const segmentIndex = Math.max(0, segments.findIndex((segment) => segment.code === prizeCode));
   const segmentSize = 360 / segments.length;
   const segmentCenter = -90 + segmentIndex * segmentSize;
-  const finalRotation = 360 * 7 + (-90 - segmentCenter);
+  const finalRotation = 360 * spins + (-90 - segmentCenter);
 
   wheel.style.transition = "none";
   wheel.style.transform = "rotate(0deg)";
@@ -393,59 +463,162 @@ function animateWheel(prizeCode) {
 
   return new Promise((resolve) => {
     requestAnimationFrame(() => {
-      wheel.style.transition = "transform 3.6s cubic-bezier(.12,.72,.1,1)";
+      wheel.style.transition = `transform ${durationMs}ms cubic-bezier(.12,.72,.1,1)`;
       wheel.style.transform = `rotate(${finalRotation}deg)`;
-      window.setTimeout(resolve, 3700);
+      window.setTimeout(resolve, durationMs + 100);
     });
   });
 }
 
+function isThanksPrizeCode(code) {
+  return ["NONE", "THANKS"].includes(String(code || "").toUpperCase());
+}
+
 function renderResult(prize) {
   const result = document.getElementById("result");
-  const isNone = prize.code === "NONE";
+  const isThanks = isThanksPrizeCode(prize.code) || prize.status === "not_won";
   const codeText = prize.serialCode || prize.code || "";
-  const statusText = isNone ? "銘謝惠顧" : prize.serialCode ? `中獎序號：${prize.serialCode}` : `兌換代碼：${codeText}`;
-  const notice = isNone ? "" : `<p class="redeem-notice">${escapeHtml(REDEEM_NOTICE)}</p>`;
+  const statusText = isThanks ? "銘謝惠顧" : prize.serialCode ? `中獎序號：${prize.serialCode}` : `兌換代碼：${codeText}`;
+  const copyButton = !isThanks && prize.serialCode
+    ? `<button class="copy-code-button" data-copy-code="${escapeHtml(prize.serialCode)}" type="button">複製序號</button>`
+    : "";
+  const notice = isThanks ? "" : `<p class="redeem-notice">${escapeHtml(REDEEM_NOTICE)}</p>`;
 
   result.innerHTML = `
     <span>${escapeHtml(statusText)}</span>
     <strong>${escapeHtml(prize.name)}</strong>
+    ${copyButton}
     ${notice}
   `;
-  setMessage(isNone ? "這次沒有中獎，明天再來試試。" : "恭喜中獎，請保存中獎序號。");
+  setMessage(isThanks ? "這次沒有中獎，明天再來試試。" : "恭喜中獎，請保存中獎序號。");
+}
+
+function renderBulkResults(data) {
+  const result = document.getElementById("result");
+  const rows = data.results.map((item) => {
+    const isThanks = isThanksPrizeCode(item.prizeCode) || item.status === "not_won";
+    const serialText = item.serialCode ? `｜${item.serialCode}` : "";
+    const copyButton = item.serialCode
+      ? `<button class="copy-code-button" data-copy-code="${escapeHtml(item.serialCode)}" type="button">複製序號</button>`
+      : "";
+    return `
+      <li class="bulk-result-item">
+        <div class="bulk-result-line">
+          <span>${item.index}. ${escapeHtml(item.prizeName)}${escapeHtml(serialText)}</span>
+          ${copyButton}
+        </div>
+        ${isThanks ? "" : `<p class="redeem-notice">${escapeHtml(REDEEM_NOTICE)}</p>`}
+      </li>
+    `;
+  }).join("");
+
+  result.innerHTML = `
+    <span>本次 10 抽結果</span>
+    <strong>${data.successCount || data.results.length} 筆完成</strong>
+    <ol class="bulk-result-list">${rows}</ol>
+  `;
+  setMessage(data.ok ? `10 抽完成，剩餘 ${data.remainingSpins} 次。` : "10 抽部分失敗，請查看結果列表。", !data.ok);
+}
+
+function handleResultClick(event) {
+  const button = event.target.closest("[data-copy-code]");
+  if (!button) return;
+  copyText(button.dataset.copyCode, button);
+}
+
+async function copyText(text, button) {
+  try {
+    await navigator.clipboard.writeText(text);
+    button.textContent = "已複製";
+    window.setTimeout(() => {
+      button.textContent = "複製序號";
+    }, 1200);
+  } catch (_error) {
+    setMessage("無法複製，請手動長按序號複製。", true);
+  }
 }
 
 async function loadHistory(lineUserId) {
   const response = await fetch(`/api/history?lineUserId=${encodeURIComponent(lineUserId)}`);
   const data = await response.json();
-  const body = document.getElementById("historyBody");
 
   if (!data.ok) {
     setHistoryMessage(data.message || "讀取紀錄失敗", true);
     return;
   }
 
+  state.historyRecords = data.records || [];
+  state.historyPage = 1;
+  renderHistoryPage();
+}
+
+function renderHistoryPage() {
+  const body = document.getElementById("historyBody");
+  const total = state.historyRecords.length;
+  const totalPages = Math.max(1, Math.ceil(total / HISTORY_PAGE_SIZE));
+  state.historyPage = Math.min(Math.max(1, state.historyPage), totalPages);
+
   body.innerHTML = "";
-  if (data.records.length === 0) {
-    body.innerHTML = `<tr><td colspan="3" class="empty-cell">目前沒有中獎紀錄</td></tr>`;
+  if (total === 0) {
+    body.innerHTML = `<tr><td colspan="5" class="empty-cell">目前沒有中獎紀錄</td></tr>`;
     setHistoryMessage("目前沒有中獎紀錄。");
+    renderHistoryPagination(totalPages);
     return;
   }
 
-  for (const record of data.records) {
-    const codeText = record.serialCode || record.prizeCode || "";
+  const start = (state.historyPage - 1) * HISTORY_PAGE_SIZE;
+  const records = state.historyRecords.slice(start, start + HISTORY_PAGE_SIZE);
+  for (const record of records) {
+    const serialText = record.serialCode || "-";
+    const hasPrize = record.status === "won";
     const row = document.createElement("tr");
     row.innerHTML = `
-      <td>
-        <strong>${escapeHtml(record.prizeName)}</strong>
-        <span>${escapeHtml(codeText)}</span>
-      </td>
+      <td><strong>${escapeHtml(record.prizeName)}</strong></td>
+      <td>${escapeHtml(serialText)}</td>
       <td>${escapeHtml(formatDateTime(record.createdAt))}</td>
       <td>${escapeHtml(formatStatus(record.status))}</td>
+      <td>${hasPrize ? escapeHtml("請提供序號給官方 LINE 兌換") : "-"}</td>
     `;
     body.appendChild(row);
   }
-  setHistoryMessage(`共 ${data.records.length} 筆紀錄。`);
+
+  setHistoryMessage(`共 ${total} 筆紀錄，第 ${state.historyPage} / ${totalPages} 頁。`);
+  renderHistoryPagination(totalPages);
+}
+
+function renderHistoryPagination(totalPages) {
+  const nav = document.getElementById("historyPagination");
+  if (!nav) return;
+  if (totalPages <= 1) {
+    nav.innerHTML = "";
+    return;
+  }
+
+  const pages = paginationPages(state.historyPage, totalPages);
+  nav.innerHTML = pages.map((page) => {
+    if (page === "...") return `<span>...</span>`;
+    return `<button class="${page === state.historyPage ? "is-active" : ""}" data-page="${page}" type="button">${page}</button>`;
+  }).join("");
+}
+
+function paginationPages(current, total) {
+  if (total <= 5) {
+    return Array.from({ length: total }, (_item, index) => index + 1);
+  }
+  if (current <= 3) {
+    return [1, 2, 3, 4, 5, "...", total];
+  }
+  if (current >= total - 2) {
+    return [1, "...", total - 4, total - 3, total - 2, total - 1, total];
+  }
+  return [1, "...", current - 1, current, current + 1, "...", total];
+}
+
+function handleHistoryPagination(event) {
+  const button = event.target.closest("[data-page]");
+  if (!button) return;
+  state.historyPage = Number(button.dataset.page);
+  renderHistoryPage();
 }
 
 function setMessage(text, isError = false) {

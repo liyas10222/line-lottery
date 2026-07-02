@@ -1,6 +1,6 @@
 from functools import wraps
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, Response, jsonify, request
 
 from config import Config
 from services.backup_service import export_backup, import_backup
@@ -29,6 +29,7 @@ from services.lottery_service import (
     update_prize_serial,
 )
 from services.operation_log_service import list_operation_logs, write_operation_log
+from services.prize_import_service import csv_template_text, import_prize_csv, preview_prize_import
 
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/api/admin")
@@ -77,6 +78,38 @@ def log_admin_action(event_type, result, status_code, payload=None, message="Adm
 @require_admin_token
 def prizes():
     result, status_code = get_admin_prizes()
+    return jsonify(result), status_code
+
+
+@admin_bp.get("/prizes/import-template")
+@require_admin_token
+def prize_import_template():
+    return Response(
+        csv_template_text(),
+        mimetype="text/csv; charset=utf-8",
+        headers={"Content-Disposition": "attachment; filename=lottery_prize_import_sample.csv"},
+    )
+
+
+@admin_bp.post("/prizes/import-preview")
+@require_admin_token
+def prize_import_preview():
+    payload = request.get_json(silent=True) or {}
+    csv_text = payload.get("csvText", "")
+    result, status_code = preview_prize_import(csv_text)
+    log_admin_action("admin_prize_csv_import_preview", result, status_code, {}, "Prize CSV import preview requested")
+    return jsonify(result), status_code
+
+
+@admin_bp.post("/prizes/import")
+@require_admin_token
+def prize_import():
+    payload = request.get_json(silent=True) or {}
+    if payload.get("confirm") != "IMPORT_PRIZE_CSV":
+        return jsonify({"ok": False, "message": "請確認匯入 CSV"}), 400
+
+    result, status_code = import_prize_csv(payload.get("csvText", ""))
+    log_admin_action("admin_prize_csv_import", result, status_code, {}, "Prize CSV import requested")
     return jsonify(result), status_code
 
 

@@ -277,6 +277,10 @@ h3 {
   color: #07140d;
 }
 
+.secondary-primary-button {
+  background: var(--cyan);
+}
+
 .line-button {
   background: #06c755;
   color: #05110a;
@@ -294,9 +298,44 @@ h3 {
   color: #ffdada;
 }
 
+.file-button {
+  min-height: 46px;
+  padding: 0 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .065);
+  color: var(--text);
+  cursor: pointer;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.file-button input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .compact-button {
   min-height: 38px;
   padding: 0 12px;
+}
+
+.skip-animation-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+}
+
+.skip-animation-control input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--line);
 }
 
 .primary-button:not(:disabled):hover,
@@ -384,6 +423,43 @@ h3 {
   line-height: 1.6;
 }
 
+.bulk-result-list {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+  text-align: left;
+}
+
+.bulk-result-item {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .045);
+}
+
+.bulk-result-line {
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.copy-code-button {
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, .07);
+  color: var(--text);
+  cursor: pointer;
+  font-size: .82rem;
+  font-weight: 800;
+}
+
 .rules-panel {
   box-shadow: none;
 }
@@ -417,9 +493,14 @@ h3 {
   border-radius: 8px;
 }
 
+.history-scroll-panel {
+  max-height: 560px;
+  overflow: auto;
+}
+
 .history-table {
   width: 100%;
-  min-width: 620px;
+  min-width: 760px;
   border-collapse: collapse;
 }
 
@@ -458,6 +539,35 @@ h3 {
   padding: 14px;
 }
 
+.pagination {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.pagination button,
+.pagination span {
+  min-width: 36px;
+  min-height: 36px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: var(--text);
+}
+
+.pagination button {
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, .06);
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.pagination button.is-active {
+  background: var(--line);
+  color: #07140d;
+}
+
 .admin-shell {
   align-content: start;
 }
@@ -465,6 +575,8 @@ h3 {
 .admin-layout {
   max-width: 1220px;
   margin: 0 auto;
+  max-height: calc(100vh - 48px);
+  overflow: auto;
 }
 
 .admin-grid {
@@ -550,6 +662,21 @@ h3 {
 .prize-list {
   display: grid;
   gap: 10px;
+}
+
+.admin-scroll-panel {
+  max-height: 560px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+}
+
+.compact-scroll-panel {
+  max-height: 320px;
+}
+
+.tall-scroll-panel {
+  max-height: 640px;
 }
 
 .admin-row,
@@ -713,7 +840,8 @@ h3 {
   .admin-actions .primary-button,
   .admin-actions .ghost-button,
   .admin-actions .danger-button,
-  .admin-actions .line-button {
+  .admin-actions .line-button,
+  .admin-actions .file-button {
     width: 100%;
   }
 }
