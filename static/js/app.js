@@ -28,11 +28,11 @@ const WHEEL_LABEL_LINES = {
   COUPON1690: ["原價1690", "商品兌換劵"],
   COUPON3280: ["原價3290", "商品兌換劵"],
   AIRPODS_PRO3: ["AirPods", "Pro3"],
-  SWITCH2_MARIOKART: ["Nintendo", "Switch 2", "瑪利歐賽車", "世界組合包"],
+  SWITCH2_MARIOKART: ["Switch 2", "瑪利歐賽車", "世界組合包"],
   IPHONE16: ["iPhone 17", "256GB"],
   IPHONE17_256: ["iPhone 17", "256GB"],
 };
-const REDEEM_NOTICE = "請截圖保存中獎序號，並將中獎序號提供給鮭魚代儲官方 LINE 兌換獎品喔！";
+const REDEEM_NOTICE = "請截圖保存中獎序號，並將中獎序號提供給官方 LINE 兌換獎品喔！";
 const HISTORY_PAGE_SIZE = 10;
 
 let segments = [...DEFAULT_SEGMENTS];
@@ -405,9 +405,9 @@ function renderWheel() {
   const size = 520;
   const center = size / 2;
   const radius = 244;
-  const slotRadius = segments.length >= 8 ? 155 : 164;
+  const imageSlotRadius = segments.length >= 8 ? 151 : 160;
+  const textSlotRadius = segments.length >= 8 ? 170 : 178;
   const slice = 360 / segments.length;
-  const labelFontSize = segments.length >= 10 ? 9.6 : segments.length >= 8 ? 11.6 : 13.5;
   const paths = [];
   const slots = [];
 
@@ -420,13 +420,16 @@ function renderWheel() {
 
     paths.push(`<path d="${sectorPath(center, center, radius, start, end)}" fill="${color}" stroke="rgba(255,255,255,.26)" stroke-width="2"></path>`);
 
-    const slotPoint = polarToCartesian(center, center, slotRadius, labelAngle);
     const lines = wheelLabelLines(segment);
     const imageUrl = segment.imageUrl || prizeImageUrl(segment.code);
-    const imageSize = segments.length >= 10 ? 38 : 48;
-    const textLineHeight = labelFontSize + 1.8;
+    const slotPoint = polarToCartesian(center, center, imageUrl ? imageSlotRadius : textSlotRadius, labelAngle);
+    const labelFontSize = imageUrl
+      ? segments.length >= 10 ? 10.8 : 12
+      : segments.length >= 10 ? 12.2 : 13.8;
+    const imageSize = segments.length >= 10 ? 36 : 46;
+    const textLineHeight = labelFontSize + 1.6;
     const textHeight = lines.length * textLineHeight;
-    const gap = imageUrl ? 6 : 0;
+    const gap = imageUrl ? 5 : 0;
     const blockHeight = (imageUrl ? imageSize : 0) + gap + textHeight;
     const blockTop = slotPoint.y - blockHeight / 2;
     const textY = blockTop + (imageUrl ? imageSize + gap : 0) + labelFontSize / 2;
