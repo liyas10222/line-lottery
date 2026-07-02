@@ -608,9 +608,17 @@ async function loadHistory(lineUserId) {
     return;
   }
 
-  state.historyRecords = data.records || [];
+  state.historyRecords = sortRecordsNewestFirst(data.records || []);
   state.historyPage = 1;
   renderHistoryPage();
+}
+
+function sortRecordsNewestFirst(records) {
+  return [...records].sort((a, b) => {
+    const timeA = Date.parse(a.createdAt || "") || 0;
+    const timeB = Date.parse(b.createdAt || "") || 0;
+    return timeB - timeA;
+  });
 }
 
 function renderHistoryPage() {
