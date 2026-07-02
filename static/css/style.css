@@ -56,7 +56,8 @@ button {
 
 .lottery-layout,
 .history-layout,
-.rules-panel {
+.rules-panel,
+.prize-showcase-panel {
   width: 100%;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -79,7 +80,8 @@ button {
 .lottery-controls-panel,
 .wheel-panel,
 .history-layout,
-.rules-panel {
+.rules-panel,
+.prize-showcase-panel {
   padding: clamp(20px, 4vw, 42px);
 }
 
@@ -377,7 +379,7 @@ h3 {
 
 .wheel-wrap {
   position: relative;
-  width: min(84vw, 430px);
+  width: min(92vw, 500px);
   aspect-ratio: 1;
   display: grid;
   place-items: center;
@@ -410,6 +412,11 @@ h3 {
   display: block;
   border-radius: 50%;
   filter: drop-shadow(0 22px 44px rgba(0, 0, 0, .36));
+}
+
+.wheel-prize-image {
+  pointer-events: none;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, .35));
 }
 
 .result-box {
@@ -530,6 +537,73 @@ h3 {
   color: var(--text);
   cursor: pointer;
   font-size: .82rem;
+  font-weight: 800;
+}
+
+.prize-showcase-panel {
+  display: grid;
+  gap: 16px;
+  box-shadow: none;
+}
+
+.section-heading {
+  display: grid;
+  gap: 6px;
+}
+
+.section-heading h2 {
+  margin: 0;
+  font-size: clamp(1.2rem, 4vw, 1.6rem);
+}
+
+.prize-showcase-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.prize-showcase-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .045);
+}
+
+.prize-showcase-card img {
+  width: 96px;
+  height: 86px;
+  object-fit: contain;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.prize-showcase-card h3 {
+  margin: 0 0 8px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.prize-showcase-card strong {
+  color: var(--gold);
+  font-size: 1.05rem;
+}
+
+.prize-rank {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 1;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, .62);
+  color: #fff;
+  font-size: .78rem;
   font-weight: 800;
 }
 
@@ -881,7 +955,7 @@ h3 {
 
 @media (min-width: 900px) {
   .app-shell {
-    width: min(1120px, calc(100% - 32px));
+    width: min(1240px, calc(100% - 32px));
     padding: 40px 0;
   }
 
@@ -908,9 +982,27 @@ h3 {
     padding-bottom: 20px;
   }
 
+  .wheel-wrap {
+    width: min(46vw, 540px);
+  }
+
   .result-box {
     align-self: start;
     margin: 0 clamp(20px, 4vw, 42px) clamp(20px, 4vw, 42px);
+  }
+
+  .prize-showcase-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .prize-showcase-card {
+    grid-template-columns: 1fr;
+    align-content: start;
+  }
+
+  .prize-showcase-card img {
+    width: 100%;
+    height: 170px;
   }
 
   .admin-grid {
@@ -948,7 +1040,17 @@ h3 {
   }
 
   .wheel-wrap {
-    width: min(86vw, 360px);
+    width: min(94vw, 390px);
+  }
+
+  .prize-showcase-card {
+    grid-template-columns: 82px minmax(0, 1fr);
+    padding: 12px;
+  }
+
+  .prize-showcase-card img {
+    width: 82px;
+    height: 76px;
   }
 
   .draw-result-panel {
