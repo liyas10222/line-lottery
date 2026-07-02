@@ -11,7 +11,6 @@ const adminState = {
 document.addEventListener("DOMContentLoaded", () => {
   bindAdmin();
   document.getElementById("adminToken").value = adminState.token;
-  document.getElementById("memberLineUserId").value = window.ADMIN_DEFAULT_USER_IDS?.[0] || "";
   initAdminPage();
 });
 
@@ -302,7 +301,7 @@ async function loadMembers() {
           <strong>${escapeHtml(member.displayName)}</strong>
           <span>${escapeHtml(member.lineUserId)}</span>
           <div class="member-stats">
-            <span>今日 ${member.todayUsed}/${member.dailyLimit}</span>
+            <span>已抽 ${member.usedCount ?? member.todayUsed}/${member.dailyLimit}</span>
             <span>剩餘 ${member.remaining}</span>
             <span>紀錄 ${member.lotteryRecordCount}</span>
             <span>中獎 ${member.wonRecordCount}</span>
@@ -369,7 +368,7 @@ async function saveMember() {
 
 async function resetToday() {
   const lineUserId = memberId();
-  if (!window.confirm(`確定重置 ${lineUserId} 今日抽獎次數？`)) return;
+  if (!window.confirm(`確定重置 ${lineUserId} 本日抽獎紀錄？`)) return;
 
   try {
     const data = await adminFetch(`/api/admin/members/${encodeURIComponent(lineUserId)}/daily-spin/reset`, {
@@ -377,7 +376,7 @@ async function resetToday() {
       body: JSON.stringify({}),
     });
     setOutput("memberOutput", data);
-    setAdminMessage("今日抽獎次數已重置。");
+    setAdminMessage("本日抽獎紀錄已重置。");
     await loadMembers();
   } catch (error) {
     showError(error);
@@ -416,7 +415,7 @@ async function syncSheet() {
 }
 
 async function rebuildSheet() {
-  const confirmed = window.confirm("重建獎池會清空目前獎項、序號、抽獎紀錄與今日抽數，再由 Google Sheet 重建。確定要繼續？");
+  const confirmed = window.confirm("重建獎池會清空目前獎項、序號、抽獎紀錄與本日抽數，再由 Google Sheet 重建。確定要繼續？");
   if (!confirmed) return;
 
   try {

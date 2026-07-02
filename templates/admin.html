@@ -10,7 +10,6 @@
     window.LINE_LOTTERY_CONFIG = {
       liffId: "{{ liff_id }}"
     };
-    window.ADMIN_DEFAULT_USER_IDS = {{ admin_user_ids | tojson }};
   </script>
 </head>
 <body data-page="admin">
@@ -71,7 +70,7 @@
             <h3>修改抽獎次數</h3>
             <label>LINE userId</label>
             <input id="memberLineUserId" class="admin-input" type="text" placeholder="Uxxxxxxxx">
-            <label>每日可抽次數</label>
+            <label>可抽次數</label>
             <input id="memberDailyLimit" class="admin-input" type="number" min="0" step="1" placeholder="空白代表使用全域設定">
             <label class="admin-check">
               <input id="memberBlocked" type="checkbox">
@@ -82,7 +81,7 @@
             <div class="admin-actions">
               <button id="loadMemberButton" class="ghost-button" type="button">讀取設定</button>
               <button id="saveMemberButton" class="primary-button" type="button">儲存設定</button>
-              <button id="resetTodayButton" class="danger-button" type="button">重置今日抽數</button>
+              <button id="resetTodayButton" class="danger-button" type="button">重置本日紀錄</button>
             </div>
             <pre id="memberOutput" class="admin-output"></pre>
           </div>

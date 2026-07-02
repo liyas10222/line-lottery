@@ -43,7 +43,7 @@ def create_app():
 
     @app.get("/admin")
     def admin_page():
-        return render_template("admin.html", admin_user_ids=sorted(Config.ADMIN_LINE_USER_IDS), liff_id=Config.LIFF_ID)
+        return render_template("admin.html", liff_id=Config.LIFF_ID)
 
     @app.get("/health")
     def health():

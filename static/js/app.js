@@ -289,7 +289,7 @@ async function refreshStatus() {
   if (data.isBlocked) {
     setMessage("此會員目前無法抽獎。", true);
   } else {
-    setMessage(data.canSpin ? `今天還可以抽 ${state.remaining} 次。` : "今日已抽過。", !data.canSpin);
+    setMessage(data.canSpin ? `還可以抽 ${state.remaining} 次。` : "目前沒有可用抽獎次數。", !data.canSpin);
   }
 }
 
@@ -309,7 +309,7 @@ function updateSpinButtons() {
     return;
   }
 
-  spinButton.textContent = state.spinning ? "抽獎中..." : state.remaining >= 1 ? "開始抽獎" : "今日已抽過";
+  spinButton.textContent = state.spinning ? "抽獎中..." : state.remaining >= 1 ? "開始抽獎" : "次數不足";
   bulkButton.textContent = state.remaining >= 10 ? "10 抽" : "抽獎次數不足 10 次";
 }
 

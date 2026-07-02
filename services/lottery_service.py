@@ -14,6 +14,9 @@ LOGGER = logging.getLogger(__name__)
 SERIAL_STATUSES = {"available", "assigned", "redeemed", "void"}
 THANKS_CODES = {"NONE", "THANKS"}
 REDEEM_NOTICE = "請截圖保存中獎序號，並將中獎序號提供給官方 LINE 兌換獎品喔！"
+MYSTERY_GIFT_CODE = "MYSTERY_GIFT"
+COUPON30_CODE = "COUPON30"
+LOCKED_GRAND_PRIZE_CODES = {"AIRPODS_PRO3", "SWITCH2_MARIOKART", "IPHONE16", "IPHONE17", "IPHONE17_256"}
 
 
 def now_local():
@@ -69,6 +72,10 @@ def validate_line_user_id(value):
     if not line_user_id:
         return None
     return line_user_id
+
+
+def prize_code(prize):
+    return clean_text(prize["code"], 80).upper()
 
 
 def init_db():
@@ -167,12 +174,11 @@ def get_member_quota(db, line_user_id):
     ).fetchone()
     spin_row = db.execute(
         """
-        SELECT count
-        FROM daily_spin
+        SELECT COUNT(*) AS count
+        FROM lottery_records
         WHERE line_user_id = ?
-          AND date = ?
         """,
-        (line_user_id, current_date),
+        (line_user_id,),
     ).fetchone()
 
     default_limit = get_default_daily_limit(db)
@@ -262,7 +268,11 @@ def fetch_prizes_with_serial_count(db):
 
 
 def is_prize_active_weighted(prize):
-    return bool(prize["is_active"]) and prize["weight"] > 0
+    return (
+        bool(prize["is_active"])
+        and prize["weight"] > 0
+        and prize_code(prize) not in LOCKED_GRAND_PRIZE_CODES
+    )
 
 
 def is_thanks_prize(prize):
@@ -285,6 +295,72 @@ def is_prize_eligible(prize):
     return is_prize_active_weighted(prize) and is_prize_awardable(prize)
 
 
+def prize_to_dict(prize):
+    if isinstance(prize, dict):
+        return dict(prize)
+    if hasattr(prize, "keys"):
+        return {key: prize[key] for key in prize.keys()}
+    return dict(prize)
+
+
+def find_prize_by_code(prizes, code):
+    target_code = clean_text(code, 80).upper()
+    for prize in prizes:
+        if prize_code(prize) == target_code:
+            return prize
+    return None
+
+
+def exhausted_weight_target(prize, prizes, none_prize):
+    if prize_code(prize) == MYSTERY_GIFT_CODE:
+        coupon30 = find_prize_by_code(prizes, COUPON30_CODE)
+        if coupon30 is not None and is_prize_eligible(coupon30):
+            return coupon30
+    return none_prize
+
+
+def effective_prize_weight_summary(prizes):
+    active_weighted_prizes = [prize for prize in prizes if is_prize_active_weighted(prize)]
+    total_weight = sum(prize["weight"] for prize in active_weighted_prizes)
+    none_prize = get_none_prize(prizes)
+    effective_weights = {}
+    transferred_weights = {}
+
+    for prize in active_weighted_prizes:
+        prize_id = prize["id"]
+        if is_prize_awardable(prize):
+            effective_weights[prize_id] = effective_weights.get(prize_id, 0) + prize["weight"]
+            continue
+
+        target = exhausted_weight_target(prize, prizes, none_prize)
+        if target is None:
+            continue
+
+        target_id = target["id"]
+        effective_weights[target_id] = effective_weights.get(target_id, 0) + prize["weight"]
+        transferred_weights[target_id] = transferred_weights.get(target_id, 0) + prize["weight"]
+
+    return {
+        "totalWeight": total_weight,
+        "effectiveWeights": effective_weights,
+        "transferredWeights": transferred_weights,
+        "transferredToNone": transferred_weights.get(none_prize["id"], 0) if none_prize else 0,
+    }
+
+
+def effective_spin_prize_pool(prizes):
+    summary = effective_prize_weight_summary(prizes)
+    pool = []
+    for prize in prizes:
+        weight = summary["effectiveWeights"].get(prize["id"], 0)
+        if weight <= 0:
+            continue
+        copied = prize_to_dict(prize)
+        copied["weight"] = weight
+        pool.append(copied)
+    return pool
+
+
 def prize_quantity_summary(prize):
     if prize["requires_serial"]:
         total = prize["total_serials"] or prize["stock"]
@@ -303,13 +379,11 @@ def prize_quantity_summary(prize):
 
 
 def serialize_prizes(prizes, include_inactive=True):
-    active_weighted_prizes = [prize for prize in prizes if is_prize_active_weighted(prize)]
-    total_weight = sum(prize["weight"] for prize in active_weighted_prizes)
-    transferred_to_none = sum(
-        prize["weight"]
-        for prize in active_weighted_prizes
-        if not is_thanks_prize(prize) and not is_prize_awardable(prize)
-    )
+    weight_summary = effective_prize_weight_summary(prizes)
+    total_weight = weight_summary["totalWeight"]
+    effective_weights = weight_summary["effectiveWeights"]
+    transferred_weights = weight_summary["transferredWeights"]
+    transferred_to_none = weight_summary["transferredToNone"]
     output = []
 
     for prize in prizes:
@@ -318,12 +392,7 @@ def serialize_prizes(prizes, include_inactive=True):
 
         eligible = is_prize_eligible(prize)
         awardable = is_prize_awardable(prize)
-        probability_weight = 0
-        if total_weight > 0 and bool(prize["is_active"]):
-            if is_thanks_prize(prize):
-                probability_weight = prize["weight"] + transferred_to_none
-            elif eligible:
-                probability_weight = prize["weight"]
+        probability_weight = effective_weights.get(prize["id"], 0) if total_weight > 0 else 0
 
         probability = probability_weight / total_weight if total_weight > 0 else 0
         quantity = prize_quantity_summary(prize)
@@ -347,6 +416,7 @@ def serialize_prizes(prizes, include_inactive=True):
                 "remainingQuantity": quantity["remainingQuantity"],
                 "isEligible": eligible,
                 "isAwardable": awardable,
+                "transferredWeightIn": transferred_weights.get(prize["id"], 0),
                 "transferredWeightToNone": transferred_to_none if is_thanks_prize(prize) else 0,
                 "probabilityWeight": probability_weight,
                 "probability": round(probability, 6),
@@ -356,10 +426,23 @@ def serialize_prizes(prizes, include_inactive=True):
     return output
 
 
+def serialize_public_prizes(prizes):
+    return [
+        {
+            "name": prize["name"],
+            "code": prize["code"],
+            "shortLabel": prize["short_label"] or prize["name"],
+            "isActive": bool(prize["is_active"]),
+        }
+        for prize in prizes
+        if bool(prize["is_active"])
+    ]
+
+
 def get_public_prizes():
     with get_db() as db:
         prizes = fetch_prizes_with_serial_count(db)
-    return {"ok": True, "prizes": serialize_prizes(prizes, include_inactive=False)}, 200
+    return {"ok": True, "prizes": serialize_public_prizes(prizes)}, 200
 
 
 def get_admin_prizes():
@@ -369,7 +452,7 @@ def get_admin_prizes():
 
 
 def get_spin_prize_pool(db):
-    return [prize for prize in fetch_prizes_with_serial_count(db) if is_prize_active_weighted(prize)]
+    return effective_spin_prize_pool(fetch_prizes_with_serial_count(db))
 
 
 def get_none_prize(prizes):
@@ -487,10 +570,10 @@ def spin_lottery(payload):
             return {"ok": False, "message": "此會員目前無法抽獎"}, 200
         if quota["remaining"] <= 0:
             db.rollback()
-            return {"ok": False, "message": "今日已抽過"}, 200
+            return {"ok": False, "message": "目前沒有可用抽獎次數"}, 200
 
         all_prizes = fetch_prizes_with_serial_count(db)
-        prizes = [prize for prize in all_prizes if is_prize_active_weighted(prize)]
+        prizes = effective_spin_prize_pool(all_prizes)
         none_prize = get_none_prize(all_prizes)
         if not prizes:
             if none_prize is None:
@@ -838,8 +921,8 @@ def list_members(filters):
     members = []
     for row in rows:
         daily_limit = row["daily_limit"] if row["daily_limit"] is not None else default_limit
-        today_used = row["today_used"] or 0
-        remaining = 0 if row["is_blocked"] else max(0, daily_limit - today_used)
+        used_count = row["lottery_record_count"] or 0
+        remaining = 0 if row["is_blocked"] else max(0, daily_limit - used_count)
         members.append(
             {
                 "id": row["id"],
@@ -848,7 +931,8 @@ def list_members(filters):
                 "pictureUrl": row["picture_url"],
                 "createdAt": row["created_at"],
                 "updatedAt": row["updated_at"],
-                "todayUsed": today_used,
+                "todayUsed": used_count,
+                "usedCount": used_count,
                 "dailyLimit": daily_limit,
                 "remaining": remaining,
                 "isBlocked": bool(row["is_blocked"]),
