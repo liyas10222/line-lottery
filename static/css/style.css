@@ -68,9 +68,15 @@ button {
 .lottery-layout {
   display: grid;
   grid-template-columns: 1fr;
+  grid-template-areas:
+    "profile"
+    "wheel"
+    "controls"
+    "result";
 }
 
 .profile-panel,
+.lottery-controls-panel,
 .wheel-panel,
 .history-layout,
 .rules-panel {
@@ -78,9 +84,18 @@ button {
 }
 
 .profile-panel {
+  grid-area: profile;
   display: grid;
   gap: 18px;
   border-bottom: 1px solid var(--border);
+}
+
+.lottery-controls-panel {
+  grid-area: controls;
+  display: grid;
+  gap: 14px;
+  align-self: start;
+  border-top: 1px solid var(--border);
 }
 
 .brand-block {
@@ -142,7 +157,8 @@ h3 {
 
 .login-card p,
 .admin-help,
-.rules-content p {
+.rules-content p,
+.rules-official p {
   margin-bottom: 0;
   color: var(--muted);
   line-height: 1.65;
@@ -353,9 +369,9 @@ h3 {
 }
 
 .wheel-panel {
+  grid-area: wheel;
   display: grid;
   place-items: center;
-  gap: 20px;
   background: rgba(255, 255, 255, .025);
 }
 
@@ -397,20 +413,22 @@ h3 {
 }
 
 .result-box {
+  grid-area: result;
   width: min(100%, 460px);
   min-height: 90px;
+  margin: 0 auto clamp(20px, 4vw, 42px);
   padding: 16px 18px;
   text-align: center;
 }
 
-.result-box span {
+.single-result-box > span {
   display: block;
   margin-bottom: 6px;
   color: var(--muted);
   overflow-wrap: anywhere;
 }
 
-.result-box strong {
+.single-result-box > strong {
   display: block;
   color: var(--gold);
   font-size: clamp(1.35rem, 6vw, 2rem);
@@ -423,19 +441,53 @@ h3 {
   line-height: 1.6;
 }
 
+.draw-result-panel {
+  width: min(100%, 520px);
+  max-height: 520px;
+  padding: 0;
+  overflow: hidden;
+  text-align: left;
+}
+
+.draw-result-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(20, 27, 36, .98);
+}
+
+.draw-result-header span {
+  color: var(--muted);
+  font-size: .92rem;
+}
+
+.draw-result-header strong {
+  color: var(--gold);
+  font-size: .96rem;
+}
+
+.draw-result-list,
 .bulk-result-list {
   display: grid;
-  gap: 10px;
-  margin: 14px 0 0;
-  padding: 0;
+  gap: 8px;
+  max-height: 420px;
+  margin: 0;
+  padding: 12px;
+  overflow-y: auto;
   list-style: none;
   text-align: left;
 }
 
 .bulk-result-item {
   display: grid;
-  gap: 6px;
-  padding: 10px;
+  gap: 7px;
+  padding: 12px 14px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: rgba(255, 255, 255, .045);
@@ -446,6 +498,27 @@ h3 {
   gap: 8px;
   justify-content: space-between;
   align-items: center;
+}
+
+.bulk-result-line strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: .96rem;
+}
+
+.serial-code-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: #fff2c4;
+  font-size: .9rem;
+  overflow-wrap: anywhere;
+}
+
+.compact-redeem-notice {
+  margin-top: 0;
+  font-size: .82rem;
+  line-height: 1.45;
 }
 
 .copy-code-button {
@@ -475,6 +548,23 @@ h3 {
   padding-top: 14px;
 }
 
+.rules-official {
+  display: grid;
+  gap: 10px;
+}
+
+.rules-official h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 1.05rem;
+}
+
+.rules-official h3 {
+  margin: 8px 0 0;
+  color: var(--gold);
+  font-size: .96rem;
+}
+
 .history-layout {
   display: grid;
   gap: 20px;
@@ -494,7 +584,7 @@ h3 {
 }
 
 .history-scroll-panel {
-  max-height: 560px;
+  max-height: 520px;
   overflow: auto;
 }
 
@@ -506,7 +596,7 @@ h3 {
 
 .history-table th,
 .history-table td {
-  padding: 15px;
+  padding: 12px 14px;
   border-bottom: 1px solid var(--border);
   text-align: left;
 }
@@ -575,8 +665,7 @@ h3 {
 .admin-layout {
   max-width: 1220px;
   margin: 0 auto;
-  max-height: calc(100vh - 48px);
-  overflow: auto;
+  overflow: visible;
 }
 
 .admin-grid {
@@ -587,9 +676,9 @@ h3 {
 
 .admin-card {
   display: grid;
-  gap: 14px;
+  gap: 12px;
   align-content: start;
-  padding: 18px;
+  padding: 16px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: rgba(255, 255, 255, .035);
@@ -643,7 +732,7 @@ h3 {
 }
 
 .admin-output {
-  min-height: 120px;
+  min-height: 96px;
   max-height: 280px;
   margin: 0;
   padding: 12px;
@@ -657,6 +746,10 @@ h3 {
   white-space: pre-wrap;
 }
 
+.csv-import-output {
+  max-height: 280px;
+}
+
 .admin-list,
 .member-list,
 .prize-list {
@@ -668,15 +761,15 @@ h3 {
   max-height: 560px;
   overflow-y: auto;
   overflow-x: hidden;
-  padding-right: 4px;
+  padding-right: 8px;
 }
 
 .compact-scroll-panel {
-  max-height: 320px;
+  max-height: 260px;
 }
 
 .tall-scroll-panel {
-  max-height: 640px;
+  max-height: 600px;
 }
 
 .admin-row,
@@ -702,7 +795,7 @@ h3 {
 .prize-metrics {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
   margin-top: 8px;
 }
 
@@ -721,7 +814,7 @@ h3 {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  align-items: start;
+  align-items: center;
 }
 
 .status-pill {
@@ -742,16 +835,18 @@ h3 {
 .admin-prize-controls {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 10px;
+  gap: 8px;
   align-items: end;
 }
 
 .serial-add-panel {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .serial-textarea {
+  min-height: 88px;
+  max-height: 180px;
   resize: vertical;
 }
 
@@ -792,11 +887,30 @@ h3 {
 
   .lottery-layout {
     grid-template-columns: minmax(0, .94fr) minmax(340px, 1.06fr);
+    grid-template-areas:
+      "profile wheel"
+      "controls result";
+    align-items: stretch;
   }
 
   .profile-panel {
     border-right: 1px solid var(--border);
     border-bottom: 0;
+  }
+
+  .lottery-controls-panel {
+    border-top: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+  }
+
+  .wheel-panel {
+    align-content: end;
+    padding-bottom: 20px;
+  }
+
+  .result-box {
+    align-self: start;
+    margin: 0 clamp(20px, 4vw, 42px) clamp(20px, 4vw, 42px);
   }
 
   .admin-grid {
@@ -835,6 +949,34 @@ h3 {
 
   .wheel-wrap {
     width: min(86vw, 360px);
+  }
+
+  .draw-result-panel {
+    max-height: 430px;
+  }
+
+  .draw-result-list {
+    max-height: 330px;
+  }
+
+  .bulk-result-line {
+    align-items: flex-start;
+  }
+
+  .copy-code-button {
+    flex: 0 0 auto;
+  }
+
+  .admin-card {
+    padding: 14px;
+  }
+
+  .admin-scroll-panel {
+    max-height: 420px;
+  }
+
+  .tall-scroll-panel {
+    max-height: 520px;
   }
 
   .admin-actions .primary-button,
