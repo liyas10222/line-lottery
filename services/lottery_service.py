@@ -13,7 +13,7 @@ LOGGER = logging.getLogger(__name__)
 
 SERIAL_STATUSES = {"available", "assigned", "redeemed", "void"}
 THANKS_CODES = {"NONE", "THANKS"}
-REDEEM_NOTICE = "請截圖保存中獎序號，並將中獎序號提供給鮭魚代儲官方 LINE 兌換獎品喔！"
+REDEEM_NOTICE = "請截圖保存中獎序號，並將中獎序號提供給官方 LINE 兌換獎品喔！"
 
 
 def now_local():
