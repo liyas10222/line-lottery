@@ -870,6 +870,12 @@ h3 {
   max-height: 260px;
 }
 
+.member-scroll-panel {
+  max-height: 420px;
+  min-height: 220px;
+  overscroll-behavior: contain;
+}
+
 .tall-scroll-panel {
   max-height: 600px;
 }
@@ -1016,7 +1022,7 @@ h3 {
 
   .result-box {
     align-self: start;
-    margin: 0 clamp(20px, 4vw, 42px) clamp(20px, 4vw, 42px);
+    margin: 0 auto clamp(20px, 4vw, 42px);
   }
 
   .admin-grid {
@@ -1093,6 +1099,11 @@ h3 {
 
   .admin-scroll-panel {
     max-height: 420px;
+  }
+
+  .member-scroll-panel {
+    max-height: 360px;
+    min-height: 180px;
   }
 
   .tall-scroll-panel {
