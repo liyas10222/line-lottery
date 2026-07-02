@@ -100,6 +100,24 @@ curl -X POST https://lottery.687tfjog.com/api/admin/backup/import \
 
 Imports use ignore-on-conflict behavior, so repeating the same import will not duplicate existing rows.
 
+## Automatic Daily Backup
+
+The app can run a lightweight daily backup scheduler.
+
+```env
+AUTO_BACKUP_ENABLED=true
+AUTO_BACKUP_DIR=backups
+```
+
+Current V1 behavior:
+
+- The scheduler writes JSON backup files into `AUTO_BACKUP_DIR`.
+- Backup files are intentionally ignored by Git.
+- Each scheduled backup writes an `operation_logs` entry.
+- On Render Free, files inside the app container are not permanent. Treat this as an operational safety net, not the final off-site backup plan.
+
+Recommended next step: connect daily backups to durable external storage.
+
 ## Rollback
 
 ### Code rollback

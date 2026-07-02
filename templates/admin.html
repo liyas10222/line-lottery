@@ -3,9 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>抽獎管理</title>
+  <title>抽獎管理後台</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <script>
+    window.LINE_LOTTERY_CONFIG = {
+      liffId: "{{ liff_id }}"
+    };
     window.ADMIN_DEFAULT_USER_IDS = {{ admin_user_ids | tojson }};
   </script>
 </head>
@@ -15,17 +19,26 @@
       <div class="history-header">
         <div>
           <p class="eyebrow">抽獎管理</p>
-          <h1>控制台</h1>
-          <p class="user-id">管理 API 需要 X-Admin-Token</p>
+          <h1>營運後台</h1>
+          <p id="adminUser" class="user-id">正在確認 LINE 管理員身分</p>
         </div>
-        <button id="adminBackButton" class="ghost-button" type="button">返回抽獎</button>
+        <button id="adminBackButton" class="ghost-button" type="button">回到抽獎</button>
       </div>
 
-      <div id="adminMessage" class="message">請先輸入管理 Token。</div>
+      <div id="adminMessage" class="message">請先完成 LINE 管理員驗證。</div>
 
-      <div class="admin-grid">
+      <section id="adminGate" class="admin-card">
+        <h2>管理員登入</h2>
+        <p class="admin-help">後台只開放管理員 LINE ID。API 操作仍需要 Admin Token。</p>
+        <div class="admin-actions">
+          <button id="adminLoginButton" class="line-button" type="button">LINE 登入</button>
+          <button id="adminLogoutButton" class="ghost-button" type="button" hidden>登出</button>
+        </div>
+      </section>
+
+      <div id="adminContent" class="admin-grid" hidden>
         <section class="admin-card">
-          <h2>管理權限</h2>
+          <h2>管理 API Token</h2>
           <label>Admin Token</label>
           <input id="adminToken" class="admin-input" type="password" autocomplete="off" placeholder="ADMIN_API_TOKEN">
           <div class="admin-actions">
@@ -35,31 +48,52 @@
         </section>
 
         <section class="admin-card">
-          <h2>會員抽獎次數</h2>
-          <label>LINE userId</label>
-          <input id="memberLineUserId" class="admin-input" type="text" placeholder="Uxxxxxxxx">
-          <label>每日可抽次數</label>
-          <input id="memberDailyLimit" class="admin-input" type="number" min="0" step="1" placeholder="例如 1、3、10">
-          <label class="admin-check">
-            <input id="memberBlocked" type="checkbox">
-            <span>封鎖此會員抽獎</span>
-          </label>
-          <label>備註</label>
-          <input id="memberNote" class="admin-input" type="text" placeholder="活動補抽、客服補償等">
+          <h2>管理員 LINE ID</h2>
+          <div id="adminUserList" class="admin-list"></div>
+          <label>新增管理員 LINE userId</label>
+          <input id="newAdminLineUserId" class="admin-input" type="text" placeholder="Uxxxxxxxx">
+          <label>名稱或備註</label>
+          <input id="newAdminNote" class="admin-input" type="text" placeholder="例如：門市小編">
           <div class="admin-actions">
-            <button id="loadMemberButton" class="ghost-button" type="button">查詢</button>
-            <button id="saveMemberButton" class="primary-button" type="button">儲存設定</button>
-            <button id="resetTodayButton" class="ghost-button" type="button">重製今日次數</button>
+            <button id="addAdminUserButton" class="primary-button" type="button">新增管理員</button>
+            <button id="loadAdminUsersButton" class="ghost-button" type="button">重新整理</button>
           </div>
-          <pre id="memberOutput" class="admin-output"></pre>
+        </section>
+
+        <section class="admin-card admin-card-wide">
+          <h2>會員管理</h2>
+          <div class="admin-toolbar">
+            <input id="memberSearch" class="admin-input" type="search" placeholder="搜尋 LINE 名稱或 userId">
+            <button id="loadMembersButton" class="ghost-button" type="button">載入會員</button>
+          </div>
+          <div id="memberList" class="member-list"></div>
+          <div class="admin-edit-panel">
+            <h3>修改抽獎次數</h3>
+            <label>LINE userId</label>
+            <input id="memberLineUserId" class="admin-input" type="text" placeholder="Uxxxxxxxx">
+            <label>每日可抽次數</label>
+            <input id="memberDailyLimit" class="admin-input" type="number" min="0" step="1" placeholder="空白代表使用全域設定">
+            <label class="admin-check">
+              <input id="memberBlocked" type="checkbox">
+              <span>封鎖此會員抽獎</span>
+            </label>
+            <label>備註</label>
+            <input id="memberNote" class="admin-input" type="text" placeholder="內部備註">
+            <div class="admin-actions">
+              <button id="loadMemberButton" class="ghost-button" type="button">讀取設定</button>
+              <button id="saveMemberButton" class="primary-button" type="button">儲存設定</button>
+              <button id="resetTodayButton" class="danger-button" type="button">重置今日抽數</button>
+            </div>
+            <pre id="memberOutput" class="admin-output"></pre>
+          </div>
         </section>
 
         <section class="admin-card">
           <h2>Google Sheet</h2>
           <div class="admin-actions">
             <button id="sheetStatusButton" class="ghost-button" type="button">查看狀態</button>
-            <button id="sheetSetupButton" class="ghost-button" type="button">重建表頭</button>
-            <button id="sheetSyncButton" class="primary-button" type="button">立即同步</button>
+            <button id="sheetSetupButton" class="ghost-button" type="button">建立表頭</button>
+            <button id="sheetSyncButton" class="primary-button" type="button">同步資料</button>
             <button id="sheetRebuildButton" class="danger-button" type="button">重建獎池</button>
             <button id="sheetResetRebuildButton" class="danger-button" type="button">清空紀錄並重建</button>
           </div>
@@ -70,18 +104,18 @@
           <h2>營運工具</h2>
           <div class="admin-actions">
             <button id="loadWritebackFailuresButton" class="ghost-button" type="button">回寫失敗</button>
-            <button id="loadOperationLogsButton" class="ghost-button" type="button">操作紀錄</button>
+            <button id="loadOperationLogsButton" class="ghost-button" type="button">操作日誌</button>
             <button id="exportBackupButton" class="primary-button" type="button">匯出備份</button>
           </div>
           <pre id="operationOutput" class="admin-output"></pre>
         </section>
 
-        <section class="admin-card">
-          <h2>獎項狀態</h2>
+        <section class="admin-card admin-card-wide">
+          <h2>獎項管理</h2>
           <div class="admin-actions">
-            <button id="loadPrizesButton" class="primary-button" type="button">重新整理</button>
+            <button id="loadPrizesButton" class="primary-button" type="button">載入獎項</button>
           </div>
-          <div id="prizeList" class="admin-list"></div>
+          <div id="prizeList" class="admin-list prize-list"></div>
         </section>
       </div>
     </section>

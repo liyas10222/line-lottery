@@ -14,8 +14,13 @@ from services.google_sheet_service import (
 )
 from services.lottery_service import (
     add_prize_serials,
+    add_admin_line_user,
+    delete_admin_line_user,
     get_admin_prizes,
     get_member_spin_limit,
+    is_admin_line_user_id,
+    list_admin_line_users,
+    list_members,
     list_prize_serials,
     reset_member_daily_spin,
     set_global_daily_limit,
@@ -38,6 +43,10 @@ def require_admin_token(view_func):
         token = request.headers.get("X-Admin-Token", "")
         if token != Config.ADMIN_API_TOKEN:
             return jsonify({"ok": False, "message": "管理權限不足"}), 401
+
+        admin_line_user_id = request_admin_line_user_id({})
+        if admin_line_user_id and not is_admin_line_user_id(admin_line_user_id):
+            return jsonify({"ok": False, "message": "LINE 管理員權限不足"}), 403
 
         return view_func(*args, **kwargs)
 
@@ -68,6 +77,37 @@ def log_admin_action(event_type, result, status_code, payload=None, message="Adm
 @require_admin_token
 def prizes():
     result, status_code = get_admin_prizes()
+    return jsonify(result), status_code
+
+
+@admin_bp.get("/members")
+@require_admin_token
+def members():
+    result, status_code = list_members(request.args)
+    return jsonify(result), status_code
+
+
+@admin_bp.get("/admin-users")
+@require_admin_token
+def admin_users():
+    result, status_code = list_admin_line_users()
+    return jsonify(result), status_code
+
+
+@admin_bp.post("/admin-users")
+@require_admin_token
+def create_admin_user():
+    payload = request.get_json(silent=True) or {}
+    result, status_code = add_admin_line_user(payload)
+    log_admin_action("admin_line_user_create", result, status_code, payload, "Admin LINE user added")
+    return jsonify(result), status_code
+
+
+@admin_bp.delete("/admin-users/<line_user_id>")
+@require_admin_token
+def remove_admin_user(line_user_id):
+    result, status_code = delete_admin_line_user(line_user_id)
+    log_admin_action("admin_line_user_delete", result, status_code, {"lineUserId": line_user_id}, "Admin LINE user deleted")
     return jsonify(result), status_code
 
 

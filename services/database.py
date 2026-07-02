@@ -305,6 +305,18 @@ def create_sqlite_schema(db):
         )
         """
     )
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS admin_line_users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            line_user_id TEXT NOT NULL UNIQUE,
+            display_name TEXT,
+            note TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
 
 
 def create_postgres_schema(db):
@@ -424,6 +436,18 @@ def create_postgres_schema(db):
         )
         """
     )
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS admin_line_users (
+            id SERIAL PRIMARY KEY,
+            line_user_id TEXT NOT NULL UNIQUE,
+            display_name TEXT,
+            note TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
 
 
 def create_indexes(db):
@@ -434,6 +458,7 @@ def create_indexes(db):
     db.execute("CREATE INDEX IF NOT EXISTS idx_prize_serials_assigned_user ON prize_serials(assigned_line_user_id)")
     db.execute("CREATE INDEX IF NOT EXISTS idx_operation_logs_created ON operation_logs(created_at)")
     db.execute("CREATE INDEX IF NOT EXISTS idx_operation_logs_type_level ON operation_logs(event_type, level)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_admin_line_users_line_user_id ON admin_line_users(line_user_id)")
 
 
 def ensure_common_columns(db):

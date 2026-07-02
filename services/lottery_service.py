@@ -225,21 +225,83 @@ def fetch_prizes_with_serial_count(db):
                 WHERE ps.prize_id = p.id
                   AND ps.status = 'available'
             ), 0) AS available_serials
+            , COALESCE((
+                SELECT COUNT(*)
+                FROM prize_serials ps
+                WHERE ps.prize_id = p.id
+            ), 0) AS total_serials
+            , COALESCE((
+                SELECT COUNT(*)
+                FROM prize_serials ps
+                WHERE ps.prize_id = p.id
+                  AND ps.status IN ('assigned', 'redeemed')
+            ), 0) AS assigned_serials
+            , COALESCE((
+                SELECT COUNT(*)
+                FROM prize_serials ps
+                WHERE ps.prize_id = p.id
+                  AND ps.status = 'redeemed'
+            ), 0) AS redeemed_serials
+            , COALESCE((
+                SELECT COUNT(*)
+                FROM prize_serials ps
+                WHERE ps.prize_id = p.id
+                  AND ps.status = 'void'
+            ), 0) AS void_serials
+            , COALESCE((
+                SELECT COUNT(*)
+                FROM lottery_records lr
+                WHERE lr.prize_id = p.id
+            ), 0) AS drawn_count
         FROM prizes p
         ORDER BY p.id ASC
         """
     ).fetchall()
 
 
+def is_prize_active_weighted(prize):
+    return bool(prize["is_active"]) and prize["weight"] > 0
+
+
+def is_prize_awardable(prize):
+    if not bool(prize["is_active"]):
+        return False
+    if prize["requires_serial"]:
+        return prize["available_serials"] > 0
+    if prize["stock"] is None:
+        return True
+    return prize["drawn_count"] < prize["stock"]
+
+
 def is_prize_eligible(prize):
-    has_stock = prize["stock"] is None or prize["stock"] > 0
-    has_serial = not prize["requires_serial"] or prize["available_serials"] > 0
-    return bool(prize["is_active"]) and prize["weight"] > 0 and has_stock and has_serial
+    return is_prize_active_weighted(prize) and is_prize_awardable(prize)
+
+
+def prize_quantity_summary(prize):
+    if prize["requires_serial"]:
+        total = prize["total_serials"] or prize["stock"]
+        drawn = prize["assigned_serials"]
+        remaining = prize["available_serials"]
+    else:
+        total = prize["stock"]
+        drawn = prize["drawn_count"]
+        remaining = None if total is None else max(0, total - drawn)
+
+    return {
+        "totalQuantity": total,
+        "drawnCount": drawn,
+        "remainingQuantity": remaining,
+    }
 
 
 def serialize_prizes(prizes, include_inactive=True):
-    eligible_prizes = [prize for prize in prizes if is_prize_eligible(prize)]
-    total_weight = sum(prize["weight"] for prize in eligible_prizes)
+    active_weighted_prizes = [prize for prize in prizes if is_prize_active_weighted(prize)]
+    total_weight = sum(prize["weight"] for prize in active_weighted_prizes)
+    transferred_to_none = sum(
+        prize["weight"]
+        for prize in active_weighted_prizes
+        if prize["code"] != "NONE" and not is_prize_awardable(prize)
+    )
     output = []
 
     for prize in prizes:
@@ -247,7 +309,16 @@ def serialize_prizes(prizes, include_inactive=True):
             continue
 
         eligible = is_prize_eligible(prize)
-        probability = (prize["weight"] / total_weight) if eligible and total_weight > 0 else 0
+        awardable = is_prize_awardable(prize)
+        probability_weight = 0
+        if total_weight > 0 and bool(prize["is_active"]):
+            if prize["code"] == "NONE":
+                probability_weight = prize["weight"] + transferred_to_none
+            elif eligible:
+                probability_weight = prize["weight"]
+
+        probability = probability_weight / total_weight if total_weight > 0 else 0
+        quantity = prize_quantity_summary(prize)
         output.append(
             {
                 "id": prize["id"],
@@ -259,7 +330,17 @@ def serialize_prizes(prizes, include_inactive=True):
                 "requiresSerial": bool(prize["requires_serial"]),
                 "isActive": bool(prize["is_active"]),
                 "availableSerials": prize["available_serials"],
+                "totalSerials": prize["total_serials"],
+                "assignedSerials": prize["assigned_serials"],
+                "redeemedSerials": prize["redeemed_serials"],
+                "voidSerials": prize["void_serials"],
+                "drawnCount": prize["drawn_count"],
+                "totalQuantity": quantity["totalQuantity"],
+                "remainingQuantity": quantity["remainingQuantity"],
                 "isEligible": eligible,
+                "isAwardable": awardable,
+                "transferredWeightToNone": transferred_to_none if prize["code"] == "NONE" else 0,
+                "probabilityWeight": probability_weight,
                 "probability": round(probability, 6),
                 "probabilityPercent": round(probability * 100, 2),
             }
@@ -279,8 +360,15 @@ def get_admin_prizes():
     return {"ok": True, "prizes": serialize_prizes(prizes, include_inactive=True)}, 200
 
 
-def get_available_prizes(db):
-    return [prize for prize in fetch_prizes_with_serial_count(db) if is_prize_eligible(prize)]
+def get_spin_prize_pool(db):
+    return [prize for prize in fetch_prizes_with_serial_count(db) if is_prize_active_weighted(prize)]
+
+
+def get_none_prize(prizes):
+    for prize in prizes:
+        if prize["code"] == "NONE" and bool(prize["is_active"]):
+            return prize
+    return None
 
 
 def choose_prize(prizes):
@@ -367,20 +455,33 @@ def spin_lottery(payload):
             db.rollback()
             return {"ok": False, "message": "今日已抽過"}, 200
 
-        prizes = get_available_prizes(db)
+        all_prizes = fetch_prizes_with_serial_count(db)
+        prizes = [prize for prize in all_prizes if is_prize_active_weighted(prize)]
+        none_prize = get_none_prize(all_prizes)
         if not prizes:
-            db.rollback()
-            return {"ok": False, "message": "目前沒有可用獎項"}, 503
+            if none_prize is None:
+                db.rollback()
+                return {"ok": False, "message": "目前沒有可用獎項"}, 503
+            prizes = [none_prize]
 
         prize = choose_prize(prizes)
         if prize is None:
             db.rollback()
             return {"ok": False, "message": "目前沒有可用獎項"}, 503
 
+        if not is_prize_awardable(prize):
+            if none_prize is None:
+                db.rollback()
+                return {"ok": False, "message": "目前沒有可用獎項"}, 503
+            prize = none_prize
+
         serial = reserve_prize_serial(db, prize, line_user_id, line_display_name, timestamp)
         if prize["requires_serial"] and serial is None:
-            db.rollback()
-            return {"ok": False, "message": "此獎項序號已用完"}, 409
+            if none_prize is None or none_prize["id"] == prize["id"]:
+                db.rollback()
+                return {"ok": False, "message": "此獎項序號已用完"}, 409
+            prize = none_prize
+            serial = None
 
         status = "not_won" if prize["code"] == "NONE" else "won"
         cursor = db.execute_insert(
@@ -444,12 +545,6 @@ def spin_lottery(payload):
             """,
             (line_user_id, quota["date"], timestamp, timestamp),
         )
-
-        if prize["stock"] is not None:
-            db.execute(
-                "UPDATE prizes SET stock = stock - 1, updated_at = ? WHERE id = ? AND stock > 0",
-                (timestamp, prize["id"]),
-            )
 
         db.commit()
     except Exception:
@@ -540,6 +635,194 @@ def get_history(line_user_id):
         for row in rows
     ]
     return {"ok": True, "records": records}, 200
+
+
+def list_members(filters):
+    current_date = today_string()
+    try:
+        limit = min(max(int(filters.get("limit", 100)), 1), 300)
+    except (TypeError, ValueError):
+        limit = 100
+
+    keyword = clean_text(filters.get("q"), 120)
+    where = []
+    values = []
+    if keyword:
+        where.append("(LOWER(m.line_user_id) LIKE ? OR LOWER(m.display_name) LIKE ?)")
+        like = f"%{keyword.lower()}%"
+        values.extend([like, like])
+    where_sql = "WHERE " + " AND ".join(where) if where else ""
+
+    with get_db() as db:
+        default_limit = get_default_daily_limit(db)
+        rows = db.execute(
+            f"""
+            SELECT
+                m.id,
+                m.line_user_id,
+                m.display_name,
+                m.picture_url,
+                m.created_at,
+                m.updated_at,
+                COALESCE(ds.count, 0) AS today_used,
+                msl.daily_limit,
+                COALESCE(msl.is_blocked, 0) AS is_blocked,
+                msl.note,
+                COALESCE(COUNT(lr.id), 0) AS lottery_record_count,
+                COALESCE(SUM(CASE WHEN lr.status = 'won' THEN 1 ELSE 0 END), 0) AS won_record_count
+            FROM members m
+            LEFT JOIN daily_spin ds
+              ON ds.line_user_id = m.line_user_id
+             AND ds.date = ?
+            LEFT JOIN member_spin_limits msl
+              ON msl.line_user_id = m.line_user_id
+            LEFT JOIN lottery_records lr
+              ON lr.line_user_id = m.line_user_id
+            {where_sql}
+            GROUP BY
+                m.id,
+                m.line_user_id,
+                m.display_name,
+                m.picture_url,
+                m.created_at,
+                m.updated_at,
+                ds.count,
+                msl.daily_limit,
+                msl.is_blocked,
+                msl.note
+            ORDER BY m.updated_at DESC, m.id DESC
+            LIMIT ?
+            """,
+            [current_date, *values, limit],
+        ).fetchall()
+
+    members = []
+    for row in rows:
+        daily_limit = row["daily_limit"] if row["daily_limit"] is not None else default_limit
+        today_used = row["today_used"] or 0
+        remaining = 0 if row["is_blocked"] else max(0, daily_limit - today_used)
+        members.append(
+            {
+                "id": row["id"],
+                "lineUserId": row["line_user_id"],
+                "displayName": row["display_name"],
+                "pictureUrl": row["picture_url"],
+                "createdAt": row["created_at"],
+                "updatedAt": row["updated_at"],
+                "todayUsed": today_used,
+                "dailyLimit": daily_limit,
+                "remaining": remaining,
+                "isBlocked": bool(row["is_blocked"]),
+                "note": row["note"],
+                "lotteryRecordCount": row["lottery_record_count"],
+                "wonRecordCount": row["won_record_count"],
+            }
+        )
+
+    return {"ok": True, "date": current_date, "members": members}, 200
+
+
+def is_admin_line_user_id(line_user_id):
+    line_user_id = validate_line_user_id(line_user_id)
+    if not line_user_id:
+        return False
+    if line_user_id in Config.ADMIN_LINE_USER_IDS:
+        return True
+    with get_db() as db:
+        row = db.execute(
+            "SELECT 1 FROM admin_line_users WHERE line_user_id = ?",
+            (line_user_id,),
+        ).fetchone()
+    return row is not None
+
+
+def list_admin_line_users():
+    with get_db() as db:
+        rows = db.execute(
+            """
+            SELECT line_user_id, display_name, note, created_at, updated_at
+            FROM admin_line_users
+            ORDER BY created_at ASC, id ASC
+            """
+        ).fetchall()
+
+    admins = []
+    seen = set()
+    for line_user_id in sorted(Config.ADMIN_LINE_USER_IDS):
+        admins.append(
+            {
+                "lineUserId": line_user_id,
+                "displayName": "",
+                "note": "環境變數 ADMIN_LINE_USER_IDS",
+                "source": "env",
+                "canDelete": False,
+            }
+        )
+        seen.add(line_user_id)
+
+    for row in rows:
+        if row["line_user_id"] in seen:
+            continue
+        admins.append(
+            {
+                "lineUserId": row["line_user_id"],
+                "displayName": row["display_name"] or "",
+                "note": row["note"] or "",
+                "source": "database",
+                "canDelete": True,
+                "createdAt": row["created_at"],
+                "updatedAt": row["updated_at"],
+            }
+        )
+
+    return {"ok": True, "admins": admins}, 200
+
+
+def add_admin_line_user(payload):
+    line_user_id = validate_line_user_id(payload.get("lineUserId"))
+    if not line_user_id:
+        return {"ok": False, "message": "缺少 LINE userId"}, 400
+    if line_user_id in Config.ADMIN_LINE_USER_IDS:
+        return {"ok": True, "message": "此 LINE userId 已由環境變數設定為管理員"}, 200
+
+    display_name = clean_text(payload.get("displayName"), 120)
+    note = clean_text(payload.get("note"), 500)
+    timestamp = now_iso()
+
+    with get_db() as db:
+        db.execute(
+            """
+            INSERT INTO admin_line_users (line_user_id, display_name, note, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(line_user_id) DO UPDATE SET
+                display_name = excluded.display_name,
+                note = excluded.note,
+                updated_at = excluded.updated_at
+            """,
+            (line_user_id, display_name, note, timestamp, timestamp),
+        )
+        db.commit()
+
+    return {"ok": True}, 200
+
+
+def delete_admin_line_user(line_user_id):
+    line_user_id = validate_line_user_id(line_user_id)
+    if not line_user_id:
+        return {"ok": False, "message": "缺少 LINE userId"}, 400
+    if line_user_id in Config.ADMIN_LINE_USER_IDS:
+        return {"ok": False, "message": "環境變數管理員不能從後台刪除，請修改 Render 環境變數"}, 400
+
+    with get_db() as db:
+        cursor = db.execute(
+            "DELETE FROM admin_line_users WHERE line_user_id = ?",
+            (line_user_id,),
+        )
+        db.commit()
+
+    if cursor.rowcount == 0:
+        return {"ok": False, "message": "找不到管理員"}, 404
+    return {"ok": True}, 200
 
 
 def update_prize(prize_id, payload):

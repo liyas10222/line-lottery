@@ -17,6 +17,13 @@ class Config:
     DATABASE_URL = os.getenv("DATABASE_URL", "")
     PORT = int(os.getenv("PORT", "5000"))
     DEFAULT_DAILY_SPIN_LIMIT = int(os.getenv("DEFAULT_DAILY_SPIN_LIMIT", "1"))
+    AUTO_BACKUP_ENABLED = os.getenv("AUTO_BACKUP_ENABLED", "true").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    AUTO_BACKUP_DIR = os.getenv("AUTO_BACKUP_DIR", "backups")
     ADMIN_API_TOKEN = os.getenv("ADMIN_API_TOKEN", "")
     ADMIN_LINE_USER_IDS = {
         item.strip()
