@@ -405,13 +405,11 @@ function renderWheel() {
   const size = 520;
   const center = size / 2;
   const radius = 244;
-  const labelRadius = segments.length >= 8 ? 172 : 178;
-  const imageRadius = segments.length >= 8 ? 102 : 108;
+  const slotRadius = segments.length >= 8 ? 155 : 164;
   const slice = 360 / segments.length;
-  const labelFontSize = segments.length >= 10 ? 10.5 : segments.length >= 8 ? 12 : 14;
+  const labelFontSize = segments.length >= 10 ? 9.6 : segments.length >= 8 ? 11.6 : 13.5;
   const paths = [];
-  const labels = [];
-  const images = [];
+  const slots = [];
 
   segments.forEach((segment, index) => {
     const start = -90 - slice / 2 + index * slice;
@@ -422,43 +420,46 @@ function renderWheel() {
 
     paths.push(`<path d="${sectorPath(center, center, radius, start, end)}" fill="${color}" stroke="rgba(255,255,255,.26)" stroke-width="2"></path>`);
 
-    const labelPoint = polarToCartesian(center, center, labelRadius, labelAngle);
+    const slotPoint = polarToCartesian(center, center, slotRadius, labelAngle);
     const lines = wheelLabelLines(segment);
-    labels.push(`
+    const imageUrl = segment.imageUrl || prizeImageUrl(segment.code);
+    const imageSize = segments.length >= 10 ? 38 : 48;
+    const textLineHeight = labelFontSize + 1.8;
+    const textHeight = lines.length * textLineHeight;
+    const gap = imageUrl ? 6 : 0;
+    const blockHeight = (imageUrl ? imageSize : 0) + gap + textHeight;
+    const blockTop = slotPoint.y - blockHeight / 2;
+    const textY = blockTop + (imageUrl ? imageSize + gap : 0) + labelFontSize / 2;
+
+    slots.push(`
+      ${imageUrl ? `
+        <image
+          class="wheel-prize-image"
+          href="${escapeHtml(imageUrl)}"
+          x="${slotPoint.x - imageSize / 2}"
+          y="${blockTop}"
+          width="${imageSize}"
+          height="${imageSize}"
+          preserveAspectRatio="xMidYMid meet"
+        ></image>
+      ` : ""}
       <text
-        x="${labelPoint.x}"
-        y="${labelPoint.y - ((lines.length - 1) * labelFontSize) / 2}"
+        class="wheel-label"
+        x="${slotPoint.x}"
+        y="${textY}"
         fill="${textColor}"
         font-size="${labelFontSize}"
         font-weight="800"
         text-anchor="middle"
         dominant-baseline="middle"
-      >${lines.map((line, lineIndex) => `<tspan x="${labelPoint.x}" dy="${lineIndex === 0 ? 0 : labelFontSize + 2}">${escapeHtml(line)}</tspan>`).join("")}</text>
+      >${lines.map((line, lineIndex) => `<tspan x="${slotPoint.x}" dy="${lineIndex === 0 ? 0 : textLineHeight}">${escapeHtml(line)}</tspan>`).join("")}</text>
     `);
-
-    const imageUrl = segment.imageUrl || prizeImageUrl(segment.code);
-    if (imageUrl) {
-      const imagePoint = polarToCartesian(center, center, imageRadius, labelAngle);
-      const imageSize = segments.length >= 10 ? 46 : 54;
-      images.push(`
-        <image
-          class="wheel-prize-image"
-          href="${escapeHtml(imageUrl)}"
-          x="${imagePoint.x - imageSize / 2}"
-          y="${imagePoint.y - imageSize / 2}"
-          width="${imageSize}"
-          height="${imageSize}"
-          preserveAspectRatio="xMidYMid meet"
-        ></image>
-      `);
-    }
   });
 
   wheel.innerHTML = `
     <svg class="wheel-svg" viewBox="0 0 ${size} ${size}" role="img" aria-label="抽獎轉盤">
       <g>${paths.join("")}</g>
-      <g class="wheel-images">${images.join("")}</g>
-      <g class="wheel-labels">${labels.join("")}</g>
+      <g class="wheel-slots">${slots.join("")}</g>
       <circle cx="${center}" cy="${center}" r="62" fill="#111a26" stroke="rgba(255,255,255,.2)" stroke-width="8"></circle>
     </svg>
   `;
