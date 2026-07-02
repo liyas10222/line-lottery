@@ -49,7 +49,7 @@
 
         <section class="admin-card">
           <h2>管理員 LINE ID</h2>
-          <div id="adminUserList" class="admin-list"></div>
+          <div id="adminUserList" class="admin-list admin-scroll-panel compact-scroll-panel"></div>
           <label>新增管理員 LINE userId</label>
           <input id="newAdminLineUserId" class="admin-input" type="text" placeholder="Uxxxxxxxx">
           <label>名稱或備註</label>
@@ -66,7 +66,7 @@
             <input id="memberSearch" class="admin-input" type="search" placeholder="搜尋 LINE 名稱或 userId">
             <button id="loadMembersButton" class="ghost-button" type="button">載入會員</button>
           </div>
-          <div id="memberList" class="member-list"></div>
+          <div id="memberList" class="member-list admin-scroll-panel"></div>
           <div class="admin-edit-panel">
             <h3>修改抽獎次數</h3>
             <label>LINE userId</label>
@@ -107,7 +107,22 @@
             <button id="loadOperationLogsButton" class="ghost-button" type="button">操作日誌</button>
             <button id="exportBackupButton" class="primary-button" type="button">匯出備份</button>
           </div>
-          <pre id="operationOutput" class="admin-output"></pre>
+          <pre id="operationOutput" class="admin-output admin-scroll-panel"></pre>
+        </section>
+
+        <section class="admin-card admin-card-wide">
+          <h2>CSV 批量匯入</h2>
+          <div class="admin-actions">
+            <button id="downloadCsvTemplateButton" class="ghost-button" type="button">下載 CSV 範例</button>
+            <label class="file-button">
+              <input id="csvImportFile" type="file" accept=".csv,text/csv">
+              <span>選擇 CSV 檔案</span>
+            </label>
+            <button id="previewCsvImportButton" class="ghost-button" type="button">預覽 / 驗證</button>
+            <button id="confirmCsvImportButton" class="primary-button" type="button" disabled>確認匯入</button>
+          </div>
+          <p id="csvFileName" class="user-id">尚未選擇 CSV 檔案</p>
+          <pre id="csvImportOutput" class="admin-output admin-scroll-panel"></pre>
         </section>
 
         <section class="admin-card admin-card-wide">
@@ -115,7 +130,7 @@
           <div class="admin-actions">
             <button id="loadPrizesButton" class="primary-button" type="button">載入獎項</button>
           </div>
-          <div id="prizeList" class="admin-list prize-list"></div>
+          <div id="prizeList" class="admin-list prize-list admin-scroll-panel tall-scroll-panel"></div>
         </section>
       </div>
     </section>

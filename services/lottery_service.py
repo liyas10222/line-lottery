@@ -12,6 +12,8 @@ DEFAULT_PRIZES = []
 LOGGER = logging.getLogger(__name__)
 
 SERIAL_STATUSES = {"available", "assigned", "redeemed", "void"}
+THANKS_CODES = {"NONE", "THANKS"}
+REDEEM_NOTICE = "請截圖保存中獎序號，並將中獎序號提供給鮭魚代儲官方 LINE 兌換獎品喔！"
 
 
 def now_local():
@@ -263,6 +265,12 @@ def is_prize_active_weighted(prize):
     return bool(prize["is_active"]) and prize["weight"] > 0
 
 
+def is_thanks_prize(prize):
+    code = clean_text(prize["code"], 80).upper()
+    name = clean_text(prize["name"], 120)
+    return code in THANKS_CODES or "銘謝" in name
+
+
 def is_prize_awardable(prize):
     if not bool(prize["is_active"]):
         return False
@@ -300,7 +308,7 @@ def serialize_prizes(prizes, include_inactive=True):
     transferred_to_none = sum(
         prize["weight"]
         for prize in active_weighted_prizes
-        if prize["code"] != "NONE" and not is_prize_awardable(prize)
+        if not is_thanks_prize(prize) and not is_prize_awardable(prize)
     )
     output = []
 
@@ -312,7 +320,7 @@ def serialize_prizes(prizes, include_inactive=True):
         awardable = is_prize_awardable(prize)
         probability_weight = 0
         if total_weight > 0 and bool(prize["is_active"]):
-            if prize["code"] == "NONE":
+            if is_thanks_prize(prize):
                 probability_weight = prize["weight"] + transferred_to_none
             elif eligible:
                 probability_weight = prize["weight"]
@@ -339,7 +347,7 @@ def serialize_prizes(prizes, include_inactive=True):
                 "remainingQuantity": quantity["remainingQuantity"],
                 "isEligible": eligible,
                 "isAwardable": awardable,
-                "transferredWeightToNone": transferred_to_none if prize["code"] == "NONE" else 0,
+                "transferredWeightToNone": transferred_to_none if is_thanks_prize(prize) else 0,
                 "probabilityWeight": probability_weight,
                 "probability": round(probability, 6),
                 "probabilityPercent": round(probability * 100, 2),
@@ -366,9 +374,34 @@ def get_spin_prize_pool(db):
 
 def get_none_prize(prizes):
     for prize in prizes:
-        if prize["code"] == "NONE" and bool(prize["is_active"]):
+        if is_thanks_prize(prize) and bool(prize["is_active"]):
             return prize
     return None
+
+
+def virtual_thanks_prize():
+    return {
+        "id": None,
+        "name": "銘謝惠顧",
+        "code": "THANKS",
+        "short_label": "銘謝惠顧",
+        "weight": 0,
+        "stock": None,
+        "requires_serial": 0,
+        "is_active": 1,
+        "available_serials": 0,
+        "total_serials": 0,
+        "assigned_serials": 0,
+        "redeemed_serials": 0,
+        "void_serials": 0,
+        "drawn_count": 0,
+    }
+
+
+def fallback_to_thanks(reason, warnings=None, payload=None):
+    if warnings is not None:
+        warnings.append({"reason": reason, **(payload or {})})
+    return virtual_thanks_prize()
 
 
 def choose_prize(prizes):
@@ -436,6 +469,7 @@ def spin_lottery(payload):
 
     db = get_db()
     sheet_writeback = None
+    fallback_warnings = []
     try:
         db.begin_immediate()
 
@@ -460,30 +494,40 @@ def spin_lottery(payload):
         none_prize = get_none_prize(all_prizes)
         if not prizes:
             if none_prize is None:
-                db.rollback()
-                return {"ok": False, "message": "目前沒有可用獎項"}, 503
-            prizes = [none_prize]
+                prize = fallback_to_thanks("no_active_weighted_prizes", warnings=fallback_warnings)
+            else:
+                prize = none_prize
+        else:
+            prize = choose_prize(prizes)
 
-        prize = choose_prize(prizes)
         if prize is None:
             db.rollback()
             return {"ok": False, "message": "目前沒有可用獎項"}, 503
 
         if not is_prize_awardable(prize):
             if none_prize is None:
-                db.rollback()
-                return {"ok": False, "message": "目前沒有可用獎項"}, 503
-            prize = none_prize
+                prize = fallback_to_thanks(
+                    "exhausted_prize_without_configured_thanks",
+                    warnings=fallback_warnings,
+                    payload={"prizeCode": prize["code"], "prizeName": prize["name"]},
+                )
+            else:
+                prize = none_prize
 
         serial = reserve_prize_serial(db, prize, line_user_id, line_display_name, timestamp)
         if prize["requires_serial"] and serial is None:
             if none_prize is None or none_prize["id"] == prize["id"]:
-                db.rollback()
-                return {"ok": False, "message": "此獎項序號已用完"}, 409
-            prize = none_prize
-            serial = None
+                prize = fallback_to_thanks(
+                    "serial_race_without_configured_thanks",
+                    warnings=fallback_warnings,
+                    payload={"prizeCode": prize["code"], "prizeName": prize["name"]},
+                )
+                serial = None
+            else:
+                prize = none_prize
+                serial = None
 
-        status = "not_won" if prize["code"] == "NONE" else "won"
+        status = "not_won" if is_thanks_prize(prize) else "won"
         cursor = db.execute_insert(
             """
             INSERT INTO lottery_records
@@ -553,6 +597,15 @@ def spin_lottery(payload):
     finally:
         db.close()
 
+    for warning in fallback_warnings:
+        write_operation_log(
+            "lottery_thanks_fallback_warning",
+            level="warning",
+            line_user_id=line_user_id,
+            message="Thanks prize fallback used",
+            payload=warning,
+        )
+
     write_operation_log(
         "lottery_spin_success",
         line_user_id=line_user_id,
@@ -606,6 +659,92 @@ def spin_lottery(payload):
         },
         "sheetWriteback": sheet_writeback_result,
     }, 200
+
+
+def draw_bulk_lottery(payload):
+    line_user_id = validate_line_user_id(payload.get("lineUserId"))
+    payload_display_name = clean_text(payload.get("displayName") or payload.get("lineDisplayName"), 120)
+    try:
+        count = int(payload.get("count", 10))
+    except (TypeError, ValueError):
+        return {"ok": False, "message": "count 必須是數字"}, 400
+
+    if not line_user_id:
+        return {"ok": False, "message": "缺少 lineUserId"}, 400
+    if count < 1 or count > 10:
+        return {"ok": False, "message": "count 必須介於 1 到 10"}, 400
+
+    with get_db() as db:
+        quota = get_member_quota(db, line_user_id)
+    if quota["isBlocked"]:
+        return {"ok": False, "message": "此會員目前無法抽獎"}, 200
+    if quota["remaining"] < count:
+        return {
+            "ok": False,
+            "message": f"抽獎次數不足 {count} 次",
+            "remainingSpins": quota["remaining"],
+        }, 200
+
+    results = []
+    failures = []
+    for index in range(count):
+        spin_result, status_code = spin_lottery(
+            {
+                "lineUserId": line_user_id,
+                "displayName": payload_display_name,
+            }
+        )
+        if status_code != 200 or not spin_result.get("ok"):
+            failure = {
+                "index": index + 1,
+                "statusCode": status_code,
+                "message": spin_result.get("message", "抽獎失敗") if isinstance(spin_result, dict) else "抽獎失敗",
+            }
+            failures.append(failure)
+            write_operation_log(
+                "lottery_bulk_draw_failure",
+                level="error",
+                line_user_id=line_user_id,
+                message="Bulk draw item failed",
+                payload=failure,
+            )
+            break
+
+        prize = spin_result["prize"]
+        results.append(
+            {
+                "index": index + 1,
+                "prizeId": prize.get("id"),
+                "prizeName": prize.get("name"),
+                "prizeCode": prize.get("code"),
+                "serialCode": prize.get("serialCode"),
+                "status": prize.get("status"),
+                "message": "" if prize.get("status") == "not_won" else REDEEM_NOTICE,
+                "sheetWriteback": spin_result.get("sheetWriteback"),
+            }
+        )
+
+    with get_db() as db:
+        updated_quota = get_member_quota(db, line_user_id)
+
+    result = {
+        "ok": len(failures) == 0 and len(results) == count,
+        "requestedCount": count,
+        "successCount": len(results),
+        "failureCount": len(failures),
+        "results": results,
+        "failures": failures,
+        "remainingSpins": updated_quota["remaining"],
+    }
+    status_code = 200 if result["ok"] else 207
+    write_operation_log(
+        "lottery_bulk_draw",
+        level="info" if result["ok"] else "error",
+        line_user_id=line_user_id,
+        message="Bulk draw completed" if result["ok"] else "Bulk draw completed with failures",
+        payload=result,
+    )
+    return result, status_code
 
 
 def get_history(line_user_id):
