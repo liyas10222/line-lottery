@@ -126,16 +126,19 @@ async function initLiff() {
   }
 }
 
-function loginWithLine() {
+async function loginWithLine() {
   if (!state.liffReady) {
-    setMessage("LINE 登入尚未準備完成，請稍後再試。", true);
-    return;
+    const ready = await initLiff();
+    if (!ready) {
+      openLiffEntry();
+      return;
+    }
   }
   if (liff.isLoggedIn()) {
     completeLogin();
     return;
   }
-  liff.login();
+  openLiffEntry();
 }
 
 function logoutLine() {
@@ -148,6 +151,16 @@ function logoutLine() {
   state.remaining = 0;
   renderLoggedOut();
   setMessage("已登出 LINE。");
+}
+
+function openLiffEntry() {
+  const liffUrl = window.LINE_LOTTERY_CONFIG?.liffUrl || "";
+  if (!liffUrl) {
+    setMessage("系統尚未設定 LIFF 入口，請稍後再試。", true);
+    return;
+  }
+  setMessage("正在開啟 LINE 登入...");
+  window.location.href = liffUrl;
 }
 
 async function completeLogin() {

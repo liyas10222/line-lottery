@@ -8,7 +8,8 @@
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <script>
     window.LINE_LOTTERY_CONFIG = {
-      liffId: "{{ liff_id }}"
+      liffId: "{{ liff_id }}",
+      liffUrl: "https://liff.line.me/{{ liff_id }}"
     };
   </script>
 </head>
@@ -22,7 +23,7 @@
         </div>
 
         <div id="authLoggedOut" class="login-card">
-          <p>請先使用 LINE 登入，系統會用 LINE userId 綁定抽獎資格。</p>
+          <p>請使用 LINE 登入綁定抽獎資格。</p>
           <button id="loginButton" class="line-button" type="button">LINE 登入</button>
         </div>
 

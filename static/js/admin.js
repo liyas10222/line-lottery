@@ -99,16 +99,19 @@ async function initLiff() {
   return true;
 }
 
-function adminLogin() {
+async function adminLogin() {
   if (!adminState.liffReady) {
-    setAdminMessage("LINE 登入尚未準備完成，請稍後再試。", true);
-    return;
+    const ready = await initLiff();
+    if (!ready) {
+      openAdminLiffEntry();
+      return;
+    }
   }
   if (liff.isLoggedIn()) {
     initAdminPage();
     return;
   }
-  liff.login();
+  openAdminLiffEntry();
 }
 
 function adminLogout() {
@@ -118,6 +121,16 @@ function adminLogout() {
   adminState.profile = null;
   adminState.isAdmin = false;
   renderAdminLocked("已登出 LINE 管理員。");
+}
+
+function openAdminLiffEntry() {
+  const liffUrl = window.LINE_LOTTERY_CONFIG?.liffUrl || "";
+  if (!liffUrl) {
+    setAdminMessage("系統尚未設定 LIFF 入口，請稍後再試。", true);
+    return;
+  }
+  setAdminMessage("正在開啟 LINE 登入...");
+  window.location.href = liffUrl;
 }
 
 function renderAdminLocked(message, isError = false) {
