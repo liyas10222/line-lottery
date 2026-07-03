@@ -77,6 +77,23 @@ Do not manually set `PORT` on Render. Render provides it automatically.
 - `/health` is the fast Render health check. It checks app config and database connectivity only.
 - `/health/deep` also checks Google Sheet access and can be slower.
 
+## Keepalive On Render Free
+
+Render Free web services spin down after idle time. The repository includes `.github/workflows/keepalive.yml` to send external requests to:
+
+- `https://lottery.687tfjog.com/health`
+- `https://lottery.687tfjog.com/lottery`
+- `https://line-lottery-p16r.onrender.com/health`
+- `https://line-lottery-p16r.onrender.com/lottery`
+
+Operational checklist:
+
+- GitHub Actions must be enabled for the repository.
+- The workflow must exist on the default branch.
+- Check the GitHub Actions tab for `Keep Production Warm` runs.
+- If GitHub scheduled runs are delayed or skipped, use a second external monitor such as UptimeRobot or cron-job.org every 5 minutes.
+- For guaranteed no cold start, upgrade the Render web service to a paid always-on instance.
+
 ## Backup APIs
 
 All backup APIs require `X-Admin-Token`.
