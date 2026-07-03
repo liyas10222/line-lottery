@@ -13,6 +13,7 @@ SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets"
 DEFAULT_SHEET_NAME = "\u8f49\u76e4"
 ASSIGNED_STATUS_LABEL = "\u5df2\u62bd\u4e2d"
 ASSIGNED_DISPLAY_NAME_HEADER = "\u62bd\u4e2d\u6703\u54e1\u540d\u7a31"
+REDEEM_CONFIRM_HEADER = "\u514c\u63db\u78ba\u8a8d"
 
 
 def format_sheet_datetime(value):
@@ -171,6 +172,8 @@ def mark_serial_assigned_in_sheet(serial, line_user_id, line_display_name, lotte
     assignment_range = f"'{escaped_sheet_name}'!I{row_number}:L{row_number}"
     display_name_range = f"'{escaped_sheet_name}'!O{row_number}:O{row_number}"
     header_range = f"'{escaped_sheet_name}'!O1"
+    redeem_header_range = f"'{escaped_sheet_name}'!P1"
+    redeem_confirm_range = f"'{escaped_sheet_name}'!P{row_number}:P{row_number}"
     url = f"https://sheets.googleapis.com/v4/spreadsheets/{Config.GOOGLE_SHEET_ID}/values:batchUpdate"
     payload = {
         "valueInputOption": "RAW",
@@ -179,6 +182,11 @@ def mark_serial_assigned_in_sheet(serial, line_user_id, line_display_name, lotte
                 "range": header_range,
                 "majorDimension": "ROWS",
                 "values": [[ASSIGNED_DISPLAY_NAME_HEADER]],
+            },
+            {
+                "range": redeem_header_range,
+                "majorDimension": "ROWS",
+                "values": [[REDEEM_CONFIRM_HEADER]],
             },
             {
                 "range": assignment_range,
@@ -194,6 +202,11 @@ def mark_serial_assigned_in_sheet(serial, line_user_id, line_display_name, lotte
                 "range": display_name_range,
                 "majorDimension": "ROWS",
                 "values": [[line_display_name or ""]],
+            },
+            {
+                "range": redeem_confirm_range,
+                "majorDimension": "ROWS",
+                "values": [[False]],
             },
         ],
     }

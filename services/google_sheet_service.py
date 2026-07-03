@@ -37,6 +37,7 @@ CHINESE_HEADERS = [
     "出貨單號",
     "備註",
     "抽中會員名稱",
+    "兌換確認",
 ]
 
 
@@ -56,6 +57,7 @@ HEADER_ALIASES = {
     "assigned_at": ["assignedat", "抽中時間", "指派時間"],
     "source_order_no": ["sourceorderno", "orderno", "出貨單號", "訂單編號", "單號"],
     "note": ["note", "備註", "說明"],
+    "redeem_confirmed": ["redeemconfirmed", "redeemedconfirmed", "兌換確認", "已兌換確認", "已使用確認", "使用確認"],
 }
 
 
@@ -115,7 +117,7 @@ def parse_serial_status(value):
     text = clean_text(value, 40).lower()
     if text in {"已抽中", "已指派", "assigned", "won"}:
         return "assigned"
-    if text in {"已兌換", "redeemed"}:
+    if text in {"已兌換", "已使用", "redeemed", "used"}:
         return "redeemed"
     if text in {"作廢", "void"}:
         return "void"
@@ -400,7 +402,7 @@ def ensure_control_sheet():
         return {"ok": False, "message": "無法取得轉盤分頁 ID"}, 500
 
     escaped_title = target_name.replace("'", "''")
-    range_name = urllib.parse.quote(f"'{escaped_title}'!A1:O1", safe="")
+    range_name = urllib.parse.quote(f"'{escaped_title}'!A1:P1", safe="")
     values_url = (
         f"https://sheets.googleapis.com/v4/spreadsheets/{Config.GOOGLE_SHEET_ID}"
         f"/values/{range_name}?valueInputOption=RAW"
@@ -409,7 +411,7 @@ def ensure_control_sheet():
         session,
         "PUT",
         values_url,
-        {"range": f"'{target_name}'!A1:O1", "majorDimension": "ROWS", "values": [CHINESE_HEADERS]},
+        {"range": f"'{target_name}'!A1:P1", "majorDimension": "ROWS", "values": [CHINESE_HEADERS]},
     )
     if error:
         return {"ok": False, "message": error}, 502
@@ -456,6 +458,22 @@ def ensure_control_sheet():
                 }
             }
         },
+        {
+            "setDataValidation": {
+                "range": {
+                    "sheetId": sheet_id,
+                    "startRowIndex": 1,
+                    "endRowIndex": 10000,
+                    "startColumnIndex": 15,
+                    "endColumnIndex": 16,
+                },
+                "rule": {
+                    "condition": {"type": "BOOLEAN"},
+                    "strict": True,
+                    "showCustomUi": True,
+                },
+            }
+        },
     ]
     url = f"https://sheets.googleapis.com/v4/spreadsheets/{Config.GOOGLE_SHEET_ID}:batchUpdate"
     _, error = send_google_json(session, "POST", url, {"requests": format_requests})
@@ -493,6 +511,7 @@ def prize_sheet_row(row):
         clean_text(row.get("sourceOrderNo"), 80),
         clean_text(row.get("note"), 500),
         "",
+        False if serial_code else "",
     ]
 
 
@@ -519,7 +538,7 @@ def upsert_prize_rows_to_google_sheet(rows):
         return {"ok": False, "message": error}, 502
 
     escaped_title = sheet_title.replace("'", "''")
-    read_range = f"'{escaped_title}'!A:O"
+    read_range = f"'{escaped_title}'!A:P"
     range_name = urllib.parse.quote(read_range, safe="")
     url = (
         f"https://sheets.googleapis.com/v4/spreadsheets/{Config.GOOGLE_SHEET_ID}"
@@ -588,7 +607,7 @@ def upsert_prize_rows_to_google_sheet(rows):
     appended_rows = 0
     appended_cells = 0
     if append_values:
-        append_range = urllib.parse.quote(f"'{escaped_title}'!A:O", safe="")
+        append_range = urllib.parse.quote(f"'{escaped_title}'!A:P", safe="")
         append_url = (
             f"https://sheets.googleapis.com/v4/spreadsheets/{Config.GOOGLE_SHEET_ID}"
             f"/values/{append_range}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS"
@@ -679,7 +698,7 @@ def parse_serial_status(value):
     text = clean_text(value, 40).lower()
     if text in {"\u5df2\u62bd\u4e2d", "\u5df2\u4e2d", "assigned", "won"}:
         return "assigned"
-    if text in {"\u5df2\u514c\u63db", "redeemed"}:
+    if text in {"\u5df2\u514c\u63db", "\u5df2\u4f7f\u7528", "redeemed", "used"}:
         return "redeemed"
     if text in {"\u4f5c\u5ee2", "void"}:
         return "void"
@@ -824,11 +843,14 @@ def sync_prize_rows(rows, source_sheet="google_sheet", rebuild=False):
                     continue
                 seen_serial_codes.add(serial_code)
 
-                sheet_status = parse_serial_status(get_cell(row, "serial_status"))
+                redeem_confirmed = parse_bool(get_cell(row, "redeem_confirmed"), default=False)
+                sheet_status = "redeemed" if redeem_confirmed else parse_serial_status(get_cell(row, "serial_status"))
                 sheet_assigned_line_user_id = None
                 sheet_assigned_display_name = None
                 sheet_lottery_record_id = None
                 sheet_assigned_at = None
+                sheet_checked_at = timestamp if sheet_status == "redeemed" else None
+                sheet_checked_by = "google_sheet" if sheet_status == "redeemed" else None
                 cursor = db.execute(
                     """
                     INSERT OR IGNORE INTO prize_serials
@@ -840,6 +862,8 @@ def sync_prize_rows(rows, source_sheet="google_sheet", rebuild=False):
                             assigned_display_name,
                             lottery_record_id,
                             assigned_at,
+                            checked_at,
+                            checked_by,
                             source_order_no,
                             source_sheet,
                             source_row,
@@ -847,7 +871,7 @@ def sync_prize_rows(rows, source_sheet="google_sheet", rebuild=False):
                             created_at,
                             updated_at
                         )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         prize_id,
@@ -857,6 +881,8 @@ def sync_prize_rows(rows, source_sheet="google_sheet", rebuild=False):
                         sheet_assigned_display_name,
                         sheet_lottery_record_id,
                         sheet_assigned_at,
+                        sheet_checked_at,
+                        sheet_checked_by,
                         source_order_no,
                         source_sheet,
                         index,
@@ -877,7 +903,9 @@ def sync_prize_rows(rows, source_sheet="google_sheet", rebuild=False):
                             assigned_line_user_id,
                             assigned_display_name,
                             lottery_record_id,
-                            assigned_at
+                            assigned_at,
+                            checked_at,
+                            checked_by
                         FROM prize_serials
                         WHERE serial_code = ?
                         """,
@@ -914,12 +942,19 @@ def sync_prize_rows(rows, source_sheet="google_sheet", rebuild=False):
                         if keep_local_assignment
                         else sheet_assigned_at or existing_serial["assigned_at"]
                     )
+                    next_checked_at = existing_serial["checked_at"]
+                    next_checked_by = existing_serial["checked_by"]
+                    if next_status == "redeemed":
+                        next_checked_at = existing_serial["checked_at"] or timestamp
+                        next_checked_by = existing_serial["checked_by"] or "google_sheet"
 
                     if next_status == "available" and not has_local_assignment:
                         next_assigned_line_user_id = None
                         next_assigned_display_name = None
                         next_lottery_record_id = None
                         next_assigned_at = None
+                        next_checked_at = None
+                        next_checked_by = None
 
                     db.execute(
                         """
@@ -930,6 +965,8 @@ def sync_prize_rows(rows, source_sheet="google_sheet", rebuild=False):
                             assigned_display_name = ?,
                             lottery_record_id = ?,
                             assigned_at = ?,
+                            checked_at = ?,
+                            checked_by = ?,
                             source_order_no = ?,
                             source_sheet = ?,
                             source_row = ?,
@@ -944,6 +981,8 @@ def sync_prize_rows(rows, source_sheet="google_sheet", rebuild=False):
                             next_assigned_display_name,
                             next_lottery_record_id,
                             next_assigned_at,
+                            next_checked_at,
+                            next_checked_by,
                             source_order_no,
                             source_sheet,
                             index,
@@ -1055,7 +1094,7 @@ def reset_google_sheet_lottery_records():
         return {"ok": False, "message": error}, 502
 
     escaped_title = sheet_title.replace("'", "''")
-    read_range = f"'{escaped_title}'!A:O"
+    read_range = f"'{escaped_title}'!A:P"
     range_name = urllib.parse.quote(read_range, safe="")
     url = (
         f"https://sheets.googleapis.com/v4/spreadsheets/{Config.GOOGLE_SHEET_ID}"
@@ -1086,6 +1125,13 @@ def reset_google_sheet_lottery_records():
                 "range": f"'{escaped_title}'!O{index}:O{index}",
                 "majorDimension": "ROWS",
                 "values": [[""]],
+            }
+        )
+        updates.append(
+            {
+                "range": f"'{escaped_title}'!P{index}:P{index}",
+                "majorDimension": "ROWS",
+                "values": [[False]],
             }
         )
 
