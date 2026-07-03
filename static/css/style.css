@@ -774,10 +774,21 @@ h3 {
   overflow: visible;
 }
 
-.admin-grid {
+.admin-grid,
+.admin-dashboard,
+.admin-workspace,
+.admin-advanced {
   display: grid;
-  grid-template-columns: 1fr;
   gap: 16px;
+}
+
+.admin-dashboard {
+  grid-template-columns: 1fr;
+}
+
+.admin-workspace {
+  grid-template-columns: 1fr;
+  align-items: start;
 }
 
 .admin-card {
@@ -794,7 +805,34 @@ h3 {
   grid-column: 1 / -1;
 }
 
-.admin-card label {
+.admin-workspace .admin-card-wide {
+  grid-column: auto;
+}
+
+.admin-access-card {
+  grid-template-columns: 1fr;
+  gap: 14px;
+  background: linear-gradient(135deg, rgba(25, 214, 107, .08), rgba(84, 199, 216, .045));
+}
+
+.admin-token-row {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-section-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.admin-section-heading .eyebrow {
+  margin-bottom: 4px;
+}
+
+.admin-card label,
+.admin-fold-content label {
   display: grid;
   gap: 8px;
   color: var(--muted);
@@ -856,8 +894,83 @@ h3 {
   white-space: pre-wrap;
 }
 
+.compact-output {
+  min-height: 72px;
+  max-height: 180px;
+}
+
 .csv-import-output {
   max-height: 280px;
+}
+
+.admin-advanced {
+  gap: 10px;
+}
+
+.admin-fold-panel {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .032);
+  overflow: hidden;
+}
+
+.admin-fold-panel summary {
+  min-height: 62px;
+  padding: 14px 16px;
+  cursor: pointer;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 14px;
+  align-items: center;
+  list-style: none;
+}
+
+.admin-fold-panel summary::-webkit-details-marker {
+  display: none;
+}
+
+.admin-fold-panel summary::after {
+  content: "+";
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  color: var(--gold);
+  font-weight: 900;
+  background: rgba(0, 0, 0, .18);
+}
+
+.admin-fold-panel[open] summary::after {
+  content: "−";
+}
+
+.admin-fold-panel summary span {
+  color: var(--text);
+  font-weight: 900;
+}
+
+.admin-fold-panel summary small {
+  grid-column: 1 / 2;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.admin-fold-content {
+  display: grid;
+  gap: 12px;
+  padding: 0 16px 16px;
+}
+
+.admin-fold-grid {
+  grid-template-columns: 1fr;
+}
+
+.admin-fold-grid > div {
+  display: grid;
+  gap: 12px;
+  align-content: start;
 }
 
 .admin-list,
@@ -1040,6 +1153,11 @@ h3 {
   .admin-toolbar {
     flex-wrap: nowrap;
   }
+
+  .admin-token-row {
+    grid-template-columns: minmax(260px, 1fr) auto;
+    align-items: end;
+  }
 }
 
 @media (min-width: 900px) {
@@ -1081,6 +1199,19 @@ h3 {
   }
 
   .admin-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-access-card {
+    grid-template-columns: minmax(0, .9fr) minmax(320px, 1.1fr);
+    align-items: center;
+  }
+
+  .admin-workspace {
+    grid-template-columns: minmax(0, 1.04fr) minmax(0, .96fr);
+  }
+
+  .admin-fold-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -1209,6 +1340,27 @@ h3 {
 
   .admin-card {
     padding: 14px;
+  }
+
+  .admin-access-card {
+    gap: 12px;
+  }
+
+  .admin-token-row {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-section-heading {
+    align-items: flex-start;
+  }
+
+  .admin-fold-panel summary {
+    min-height: 58px;
+    padding: 13px 14px;
+  }
+
+  .admin-fold-content {
+    padding: 0 14px 14px;
   }
 
   .admin-scroll-panel {

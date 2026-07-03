@@ -4,6 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>抽獎管理後台</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/app-icon.png') }}?v={{ asset_version }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/app-icon.png') }}?v={{ asset_version }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v={{ asset_version }}">
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <script>
@@ -36,115 +38,160 @@
         </div>
       </section>
 
-      <div id="adminContent" class="admin-grid" hidden>
-        <section class="admin-card">
-          <h2>管理 API Token</h2>
-          <label>Admin Token</label>
-          <input id="adminToken" class="admin-input" type="password" autocomplete="off" placeholder="ADMIN_API_TOKEN">
-          <div class="admin-actions">
-            <button id="saveTokenButton" class="primary-button" type="button">儲存 Token</button>
-            <button id="clearTokenButton" class="ghost-button" type="button">清除</button>
+      <div id="adminContent" class="admin-dashboard" hidden>
+        <section class="admin-card admin-access-card">
+          <div>
+            <h2>後台權限</h2>
+            <p class="admin-help">日常操作以會員補次數、查詢紀錄為主；進階設定已收納在下方分類。</p>
           </div>
-        </section>
-
-        <section class="admin-card">
-          <h2>管理員 LINE ID</h2>
-          <div id="adminUserList" class="admin-list admin-scroll-panel compact-scroll-panel"></div>
-          <label>新增管理員 LINE userId</label>
-          <input id="newAdminLineUserId" class="admin-input" type="text" placeholder="Uxxxxxxxx">
-          <label>名稱或備註</label>
-          <input id="newAdminNote" class="admin-input" type="text" placeholder="例如：門市小編">
-          <div class="admin-actions">
-            <button id="addAdminUserButton" class="primary-button" type="button">新增管理員</button>
-            <button id="loadAdminUsersButton" class="ghost-button" type="button">重新整理</button>
-          </div>
-        </section>
-
-        <section class="admin-card admin-card-wide">
-          <h2>會員管理</h2>
-          <div class="admin-toolbar">
-            <input id="memberSearch" class="admin-input" type="search" placeholder="搜尋 LINE 名稱或 userId">
-            <button id="loadMembersButton" class="ghost-button" type="button">載入會員</button>
-          </div>
-          <div id="memberList" class="member-list admin-scroll-panel member-scroll-panel"></div>
-          <div class="admin-edit-panel">
-            <h3>修改抽獎次數</h3>
-            <label>LINE userId</label>
-            <input id="memberLineUserId" class="admin-input" type="text" placeholder="Uxxxxxxxx">
-            <label>剩餘可抽次數</label>
-            <input id="memberRemainingSpins" class="admin-input" type="number" min="0" step="1" placeholder="輸入要保留給會員的剩餘抽獎次數">
-            <label class="admin-check">
-              <input id="memberBlocked" type="checkbox">
-              <span>封鎖此會員抽獎</span>
+          <div class="admin-token-row">
+            <label>
+              Admin Token
+              <input id="adminToken" class="admin-input" type="password" autocomplete="off" placeholder="ADMIN_API_TOKEN">
             </label>
-            <label>備註</label>
-            <input id="memberNote" class="admin-input" type="text" placeholder="內部備註">
             <div class="admin-actions">
-              <button id="loadMemberButton" class="ghost-button" type="button">讀取設定</button>
-              <button id="saveMemberButton" class="primary-button" type="button">儲存設定</button>
-              <button id="deleteMemberButton" class="danger-button" type="button">刪除用戶</button>
+              <button id="saveTokenButton" class="primary-button" type="button">儲存 Token</button>
+              <button id="clearTokenButton" class="ghost-button" type="button">清除</button>
             </div>
-            <pre id="memberOutput" class="admin-output"></pre>
           </div>
         </section>
 
-        <section class="admin-card admin-card-wide">
-          <h2>抽獎紀錄查詢</h2>
-          <div class="admin-toolbar">
-            <input id="recordSearch" class="admin-input" type="search" placeholder="搜尋 LINE 名稱、userId、獎項或序號">
-            <select id="recordStatusFilter" class="admin-input admin-select" aria-label="抽獎紀錄狀態">
-              <option value="">全部紀錄</option>
-              <option value="won">中獎</option>
-              <option value="not_won">未中獎</option>
-            </select>
-            <button id="loadRecordsButton" class="ghost-button" type="button">查詢紀錄</button>
-          </div>
-          <div id="recordList" class="admin-list record-list admin-scroll-panel record-scroll-panel"></div>
+        <section class="admin-workspace">
+          <section class="admin-card admin-card-wide">
+            <div class="admin-section-heading">
+              <div>
+                <p class="eyebrow">日常作業</p>
+                <h2>會員管理</h2>
+              </div>
+              <span class="status-pill is-active">常用</span>
+            </div>
+            <div class="admin-toolbar">
+              <input id="memberSearch" class="admin-input" type="search" placeholder="搜尋 LINE 名稱或 userId">
+              <button id="loadMembersButton" class="ghost-button" type="button">載入會員</button>
+            </div>
+            <div id="memberList" class="member-list admin-scroll-panel member-scroll-panel"></div>
+            <div class="admin-edit-panel">
+              <h3>修改會員抽獎資格</h3>
+              <label>LINE userId</label>
+              <input id="memberLineUserId" class="admin-input" type="text" placeholder="Uxxxxxxxx">
+              <label>剩餘可抽次數</label>
+              <input id="memberRemainingSpins" class="admin-input" type="number" min="0" step="1" placeholder="輸入要保留給會員的剩餘抽獎次數">
+              <label class="admin-check">
+                <input id="memberBlocked" type="checkbox">
+                <span>封鎖此會員抽獎</span>
+              </label>
+              <label>備註</label>
+              <input id="memberNote" class="admin-input" type="text" placeholder="內部備註">
+              <div class="admin-actions">
+                <button id="loadMemberButton" class="ghost-button" type="button">讀取設定</button>
+                <button id="saveMemberButton" class="primary-button" type="button">儲存設定</button>
+                <button id="deleteMemberButton" class="danger-button" type="button">刪除用戶</button>
+              </div>
+              <pre id="memberOutput" class="admin-output compact-output"></pre>
+            </div>
+          </section>
+
+          <section class="admin-card admin-card-wide">
+            <div class="admin-section-heading">
+              <div>
+                <p class="eyebrow">日常查詢</p>
+                <h2>抽獎紀錄查詢</h2>
+              </div>
+              <span class="status-pill is-active">常用</span>
+            </div>
+            <div class="admin-toolbar">
+              <input id="recordSearch" class="admin-input" type="search" placeholder="搜尋 LINE 名稱、userId、獎項或序號">
+              <select id="recordStatusFilter" class="admin-input admin-select" aria-label="抽獎紀錄狀態">
+                <option value="">全部紀錄</option>
+                <option value="won">中獎</option>
+                <option value="not_won">未中獎</option>
+              </select>
+              <button id="loadRecordsButton" class="ghost-button" type="button">查詢紀錄</button>
+            </div>
+            <div id="recordList" class="admin-list record-list admin-scroll-panel record-scroll-panel"></div>
+          </section>
         </section>
 
-        <section class="admin-card">
-          <h2>Google Sheet</h2>
-          <div class="admin-actions">
-            <button id="sheetStatusButton" class="ghost-button" type="button">查看狀態</button>
-            <button id="sheetSetupButton" class="ghost-button" type="button">建立表頭</button>
-            <button id="sheetSyncButton" class="primary-button" type="button">同步資料</button>
-            <button id="sheetRebuildButton" class="danger-button" type="button">重建獎池</button>
-            <button id="sheetResetRebuildButton" class="danger-button" type="button">清空紀錄並重建</button>
-          </div>
-          <pre id="sheetOutput" class="admin-output"></pre>
-        </section>
+        <section class="admin-advanced">
+          <details class="admin-fold-panel">
+            <summary>
+              <span>管理員設定</span>
+              <small>新增或移除可進後台的 LINE ID</small>
+            </summary>
+            <div class="admin-fold-content">
+              <div id="adminUserList" class="admin-list admin-scroll-panel compact-scroll-panel"></div>
+              <label>新增管理員 LINE userId</label>
+              <input id="newAdminLineUserId" class="admin-input" type="text" placeholder="Uxxxxxxxx">
+              <label>名稱或備註</label>
+              <input id="newAdminNote" class="admin-input" type="text" placeholder="例如：門市小編">
+              <div class="admin-actions">
+                <button id="addAdminUserButton" class="primary-button" type="button">新增管理員</button>
+                <button id="loadAdminUsersButton" class="ghost-button" type="button">重新整理</button>
+              </div>
+            </div>
+          </details>
 
-        <section class="admin-card">
-          <h2>營運工具</h2>
-          <div class="admin-actions">
-            <button id="loadWritebackFailuresButton" class="ghost-button" type="button">回寫失敗</button>
-            <button id="loadOperationLogsButton" class="ghost-button" type="button">操作日誌</button>
-            <button id="exportBackupButton" class="primary-button" type="button">匯出備份</button>
-          </div>
-          <pre id="operationOutput" class="admin-output"></pre>
-        </section>
+          <details class="admin-fold-panel">
+            <summary>
+              <span>Google Sheet 與營運工具</span>
+              <small>同步、備份、回寫失敗與操作日誌</small>
+            </summary>
+            <div class="admin-fold-content admin-fold-grid">
+              <div>
+                <h3>Google Sheet</h3>
+                <div class="admin-actions">
+                  <button id="sheetStatusButton" class="ghost-button" type="button">查看狀態</button>
+                  <button id="sheetSetupButton" class="ghost-button" type="button">建立表頭</button>
+                  <button id="sheetSyncButton" class="primary-button" type="button">同步資料</button>
+                  <button id="sheetRebuildButton" class="danger-button" type="button">重建獎池</button>
+                  <button id="sheetResetRebuildButton" class="danger-button" type="button">清空紀錄並重建</button>
+                </div>
+                <pre id="sheetOutput" class="admin-output"></pre>
+              </div>
+              <div>
+                <h3>營運工具</h3>
+                <div class="admin-actions">
+                  <button id="loadWritebackFailuresButton" class="ghost-button" type="button">回寫失敗</button>
+                  <button id="loadOperationLogsButton" class="ghost-button" type="button">操作日誌</button>
+                  <button id="exportBackupButton" class="primary-button" type="button">匯出備份</button>
+                </div>
+                <pre id="operationOutput" class="admin-output"></pre>
+              </div>
+            </div>
+          </details>
 
-        <section class="admin-card admin-card-wide">
-          <h2>CSV 批量匯入</h2>
-          <div class="admin-actions">
-            <button id="downloadCsvTemplateButton" class="ghost-button" type="button">下載 CSV 範例</button>
-            <label class="file-button">
-              <input id="csvImportFile" type="file" accept=".csv,text/csv">
-              <span>選擇 CSV 檔案</span>
-            </label>
-            <button id="previewCsvImportButton" class="ghost-button" type="button">預覽 / 驗證</button>
-            <button id="confirmCsvImportButton" class="primary-button" type="button" disabled>確認匯入</button>
-          </div>
-          <p id="csvFileName" class="user-id">尚未選擇 CSV 檔案</p>
-          <pre id="csvImportOutput" class="admin-output csv-import-output"></pre>
-        </section>
+          <details class="admin-fold-panel">
+            <summary>
+              <span>CSV 批量匯入</span>
+              <small>大量新增獎項與序號時使用</small>
+            </summary>
+            <div class="admin-fold-content">
+              <div class="admin-actions">
+                <button id="downloadCsvTemplateButton" class="ghost-button" type="button">下載 CSV 範例</button>
+                <label class="file-button">
+                  <input id="csvImportFile" type="file" accept=".csv,text/csv">
+                  <span>選擇 CSV 檔案</span>
+                </label>
+                <button id="previewCsvImportButton" class="ghost-button" type="button">預覽 / 驗證</button>
+                <button id="confirmCsvImportButton" class="primary-button" type="button" disabled>確認匯入</button>
+              </div>
+              <p id="csvFileName" class="user-id">尚未選擇 CSV 檔案</p>
+              <pre id="csvImportOutput" class="admin-output csv-import-output"></pre>
+            </div>
+          </details>
 
-        <section class="admin-card admin-card-wide">
-          <h2>獎項管理</h2>
-          <div class="admin-actions">
-            <button id="loadPrizesButton" class="primary-button" type="button">載入獎項</button>
-          </div>
-          <div id="prizeList" class="admin-list prize-list admin-scroll-panel tall-scroll-panel"></div>
+          <details class="admin-fold-panel">
+            <summary>
+              <span>獎項管理</span>
+              <small>調整獎項名稱、權重、序號與啟用狀態</small>
+            </summary>
+            <div class="admin-fold-content">
+              <div class="admin-actions">
+                <button id="loadPrizesButton" class="primary-button" type="button">載入獎項</button>
+              </div>
+              <div id="prizeList" class="admin-list prize-list admin-scroll-panel tall-scroll-panel"></div>
+            </div>
+          </details>
         </section>
       </div>
     </section>

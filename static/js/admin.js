@@ -157,7 +157,7 @@ function renderAdminUnlocked() {
 }
 
 async function loadDashboard() {
-  await Promise.all([loadAdminUsers(), loadMembers(), loadPrizes()]);
+  await Promise.all([loadMembers(), loadLotteryRecords()]);
 }
 
 function saveToken() {
