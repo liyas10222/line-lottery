@@ -77,6 +77,27 @@ Do not manually set `PORT` on Render. Render provides it automatically.
 - `/health` is the fast Render health check. It checks app config and database connectivity only.
 - `/health/deep` also checks Google Sheet access and can be slower.
 
+## Operations Audit
+
+Run the isolated customer/admin operations audit before important production changes:
+
+```bash
+python scripts/ops_audit.py --draws 3000 --live-url https://lottery.687tfjog.com
+```
+
+What it checks:
+
+- New members default to 0 remaining spins.
+- Admin can grant spins, block members, delete member profiles, and query records.
+- Customer can single draw, 10-draw, and view newest-first history.
+- CSV duplicate serial validation, CSV import, duplicate rerun, and manual serial creation.
+- Admin API rejects missing token, token-only requests, and wrong LINE admin IDs.
+- Large draw probability behavior, grand-prize lock, exhausted-prize weight transfer, and duplicate serial detection.
+- Concurrent serial race: 20 users competing for 1 serial should produce exactly 1 serial winner.
+- Optional live production checks are read-only: `/health`, `/lottery`, public prizes, unauthorized admin rejection, and unknown member status.
+
+The audit uses a temporary SQLite database and disables Google Sheet credentials by default. It does not consume production spins or production prize serials.
+
 ## Keepalive On Render Free
 
 Render Free web services spin down after idle time. The repository includes `.github/workflows/keepalive.yml` to send external requests to:
