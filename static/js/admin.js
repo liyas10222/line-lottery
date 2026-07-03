@@ -295,16 +295,20 @@ async function loadAdminUsers() {
   try {
     const data = await adminFetch("/api/admin/admin-users");
     const list = document.getElementById("adminUserList");
-    list.innerHTML = data.admins.map((admin) => `
+    list.innerHTML = data.admins.map((admin) => {
+      const label = admin.displayName || admin.note || admin.lineUserId;
+      return `
       <div class="admin-row admin-user-row" data-line-user-id="${escapeHtml(admin.lineUserId)}">
-        <strong>${escapeHtml(admin.displayName || admin.lineUserId)}</strong>
-        <span>${escapeHtml(admin.lineUserId)}</span>
+        <strong>${escapeHtml(label)}</strong>
+        <span>LINE ID：${escapeHtml(admin.lineUserId)}</span>
+        ${admin.note ? `<span>註記：${escapeHtml(admin.note)}</span>` : ""}
         <span>來源：${escapeHtml(admin.source === "env" ? "環境變數" : "後台設定")}</span>
         <div class="admin-actions">
           <button class="danger-button" data-action="delete-admin" type="button" ${admin.canDelete ? "" : "disabled"}>刪除管理員</button>
         </div>
       </div>
-    `).join("") || `<div class="empty-cell">尚未設定管理員</div>`;
+    `;
+    }).join("") || `<div class="empty-cell">尚未設定管理員</div>`;
     setAdminMessage("管理員清單已更新。");
   } catch (error) {
     showError(error);
@@ -317,7 +321,7 @@ async function addAdminUser() {
   try {
     await adminFetch("/api/admin/admin-users", {
       method: "POST",
-      body: JSON.stringify({ lineUserId, note }),
+      body: JSON.stringify({ lineUserId, displayName: note, note }),
     });
     document.getElementById("newAdminLineUserId").value = "";
     document.getElementById("newAdminNote").value = "";
