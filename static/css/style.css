@@ -28,6 +28,7 @@ body {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   background: linear-gradient(135deg, #0f141b 0%, #111923 54%, #171923 100%);
   color: var(--text);
+  overflow-x: hidden;
 }
 
 button,
@@ -90,6 +91,7 @@ button {
   display: grid;
   gap: 18px;
   border-bottom: 1px solid var(--border);
+  min-width: 0;
 }
 
 .lottery-controls-panel {
@@ -164,6 +166,7 @@ h3 {
   margin-bottom: 0;
   color: var(--muted);
   line-height: 1.65;
+  overflow-wrap: anywhere;
 }
 
 .profile-card {
@@ -1041,8 +1044,48 @@ h3 {
 
 @media (max-width: 520px) {
   .app-shell {
-    width: min(100% - 18px, 560px);
-    padding: 16px 0;
+    width: 100%;
+    padding: 0;
+    gap: 12px;
+    align-content: start;
+  }
+
+  .lottery-layout,
+  .history-layout,
+  .rules-panel,
+  .prize-showcase-panel {
+    border-left: 0;
+    border-right: 0;
+    border-radius: 0;
+  }
+
+  .profile-panel,
+  .lottery-controls-panel,
+  .wheel-panel,
+  .history-layout,
+  .rules-panel,
+  .prize-showcase-panel {
+    padding: 18px 16px;
+  }
+
+  h1 {
+    font-size: clamp(2.3rem, 12vw, 3rem);
+  }
+
+  .login-card,
+  .profile-card,
+  .quota-box,
+  .result-box {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .line-button,
+  .primary-button,
+  .ghost-button,
+  .danger-button {
+    max-width: 100%;
+    overflow-wrap: anywhere;
   }
 
   .history-header {
@@ -1059,8 +1102,27 @@ h3 {
     height: 64px;
   }
 
+  .wheel-panel {
+    overflow: hidden;
+  }
+
   .wheel-wrap {
-    width: min(94vw, 390px);
+    width: min(100%, 320px);
+  }
+
+  .pointer {
+    top: -6px;
+    border-left-width: 15px;
+    border-right-width: 15px;
+    border-top-width: 27px;
+  }
+
+  .result-box {
+    margin: 0 auto 18px;
+  }
+
+  .actions {
+    gap: 10px;
   }
 
   .prize-showcase-card {
