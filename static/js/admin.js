@@ -296,7 +296,7 @@ async function loadAdminUsers() {
     const data = await adminFetch("/api/admin/admin-users");
     const list = document.getElementById("adminUserList");
     list.innerHTML = data.admins.map((admin) => {
-      const label = admin.displayName || admin.note || admin.lineUserId;
+      const label = admin.displayName || (admin.source === "env" ? admin.lineUserId : admin.note) || admin.lineUserId;
       return `
       <div class="admin-row admin-user-row" data-line-user-id="${escapeHtml(admin.lineUserId)}">
         <strong>${escapeHtml(label)}</strong>

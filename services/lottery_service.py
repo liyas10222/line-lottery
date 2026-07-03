@@ -1107,14 +1107,30 @@ def list_admin_line_users():
             ORDER BY created_at ASC, id ASC
             """
         ).fetchall()
+        env_display_names = {}
+        env_admin_ids = sorted(Config.ADMIN_LINE_USER_IDS)
+        if env_admin_ids:
+            placeholders = ",".join("?" for _ in env_admin_ids)
+            member_rows = db.execute(
+                f"""
+                SELECT line_user_id, display_name
+                FROM members
+                WHERE line_user_id IN ({placeholders})
+                """,
+                env_admin_ids,
+            ).fetchall()
+            env_display_names = {
+                row["line_user_id"]: row["display_name"] or ""
+                for row in member_rows
+            }
 
     admins = []
     seen = set()
-    for line_user_id in sorted(Config.ADMIN_LINE_USER_IDS):
+    for line_user_id in env_admin_ids:
         admins.append(
             {
                 "lineUserId": line_user_id,
-                "displayName": "",
+                "displayName": env_display_names.get(line_user_id, ""),
                 "note": "環境變數 ADMIN_LINE_USER_IDS",
                 "source": "env",
                 "canDelete": False,
