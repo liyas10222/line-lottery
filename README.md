@@ -50,7 +50,7 @@ http://127.0.0.1:5000/lottery
 LINE_LOGIN_CHANNEL_ID=你的LINE_LOGIN_CHANNEL_ID
 LINE_LOGIN_CHANNEL_SECRET=你的LINE_LOGIN_CHANNEL_SECRET
 LIFF_ID=你的LIFF_ID
-DEFAULT_DAILY_SPIN_LIMIT=1
+DEFAULT_DAILY_SPIN_LIMIT=0
 ADMIN_API_TOKEN=replace-with-a-long-random-admin-token
 ADMIN_LINE_USER_IDS=Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 GOOGLE_SHEET_ID=1S0mTq8M6jZ9S-ss73mpCy-PGyiSRfWulOsZUXepboGs
@@ -127,18 +127,18 @@ http://127.0.0.1:5000/admin
 查看目前獎池與可用序號數
 ```
 
-全體會員預設每日次數存在 `app_settings.default_daily_spin_limit`，預設值由 `.env` 的 `DEFAULT_DAILY_SPIN_LIMIT` 建立。
+全體會員預設可抽次數存在 `app_settings.default_daily_spin_limit`，預設值由 `.env` 的 `DEFAULT_DAILY_SPIN_LIMIT` 建立；正式活動預設應為 `0`，由訂單、活動或管理員補發。
 
-更新全體會員預設每日次數：
+更新全體會員預設可抽次數：
 
 ```bash
 curl -X PATCH http://127.0.0.1:5000/api/admin/settings/daily-spin-limit ^
   -H "Content-Type: application/json" ^
   -H "X-Admin-Token: your-admin-token" ^
-  -d "{\"dailyLimit\":1}"
+  -d "{\"dailyLimit\":0}"
 ```
 
-指定單一會員每日次數：
+指定單一會員可抽次數：
 
 ```bash
 curl -X PUT http://127.0.0.1:5000/api/admin/members/Uxxxxxxxx/spin-limit ^

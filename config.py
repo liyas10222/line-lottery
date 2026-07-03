@@ -16,7 +16,7 @@ class Config:
     DATABASE_PATH = os.getenv("DATABASE_PATH", "lottery.db")
     DATABASE_URL = os.getenv("DATABASE_URL", "")
     PORT = int(os.getenv("PORT", "5000"))
-    DEFAULT_DAILY_SPIN_LIMIT = int(os.getenv("DEFAULT_DAILY_SPIN_LIMIT", "1"))
+    DEFAULT_DAILY_SPIN_LIMIT = int(os.getenv("DEFAULT_DAILY_SPIN_LIMIT", "0"))
     AUTO_BACKUP_ENABLED = os.getenv("AUTO_BACKUP_ENABLED", "true").strip().lower() in {
         "1",
         "true",

@@ -95,15 +95,34 @@ def init_db():
                 (name, code, short_label, weight, stock, active, requires_serial, timestamp, timestamp),
             )
 
+        ensure_default_spin_limit_setting(db, timestamp)
+        db.commit()
+
+
+def ensure_default_spin_limit_setting(db, timestamp):
+    desired_value = "0"
+    row = db.execute(
+        "SELECT value FROM app_settings WHERE key = 'default_daily_spin_limit'"
+    ).fetchone()
+    if row is None:
         db.execute(
             """
             INSERT INTO app_settings (key, value, created_at, updated_at)
             VALUES ('default_daily_spin_limit', ?, ?, ?)
-            ON CONFLICT(key) DO NOTHING
             """,
-            (str(Config.DEFAULT_DAILY_SPIN_LIMIT), timestamp, timestamp),
+            (desired_value, timestamp, timestamp),
         )
-        db.commit()
+        return
+
+    if desired_value == "0" and str(row["value"]) == "1":
+        db.execute(
+            """
+            UPDATE app_settings
+            SET value = ?, updated_at = ?
+            WHERE key = 'default_daily_spin_limit'
+            """,
+            (desired_value, timestamp),
+        )
 
 
 def get_setting(db, key, default_value):
@@ -129,11 +148,11 @@ def set_setting(key, value):
 
 
 def get_default_daily_limit(db):
-    value = get_setting(db, "default_daily_spin_limit", str(Config.DEFAULT_DAILY_SPIN_LIMIT))
+    value = get_setting(db, "default_daily_spin_limit", "0")
     try:
         return max(0, int(value))
     except ValueError:
-        return max(0, Config.DEFAULT_DAILY_SPIN_LIMIT)
+        return 0
 
 
 def sync_member(payload):
@@ -1100,6 +1119,8 @@ def set_global_daily_limit(payload):
         return {"ok": False, "message": "dailyLimit 必須是 0 以上整數"}, 400
     if daily_limit is None:
         return {"ok": False, "message": "缺少 dailyLimit"}, 400
+    if daily_limit != 0:
+        return {"ok": False, "message": "全域預設抽獎次數固定為 0，請用會員管理或訂單發放補次數"}, 400
     return set_setting("default_daily_spin_limit", daily_limit)
 
 
