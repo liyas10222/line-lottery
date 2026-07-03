@@ -135,11 +135,7 @@ function loginWithLine() {
     completeLogin();
     return;
   }
-  if (typeof liff.isInClient === "function" && liff.isInClient()) {
-    setMessage("LINE 內的 LIFF 會自動登入，請重新整理或從活動連結重新開啟。", true);
-    return;
-  }
-  liff.login({ redirectUri: cleanLoginRedirectUri() });
+  liff.login();
 }
 
 function logoutLine() {
@@ -152,10 +148,6 @@ function logoutLine() {
   state.remaining = 0;
   renderLoggedOut();
   setMessage("已登出 LINE。");
-}
-
-function cleanLoginRedirectUri() {
-  return `${window.location.origin}${window.location.pathname}`;
 }
 
 async function completeLogin() {

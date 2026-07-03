@@ -47,6 +47,11 @@ class Config:
     LINE_LOGIN_CHANNEL_ID = os.getenv("LINE_LOGIN_CHANNEL_ID", "")
     LINE_LOGIN_CHANNEL_SECRET = os.getenv("LINE_LOGIN_CHANNEL_SECRET", "")
     LIFF_ID = os.getenv("LIFF_ID", "")
+    STATIC_ASSET_VERSION = (
+        os.getenv("STATIC_ASSET_VERSION")
+        or os.getenv("RENDER_GIT_COMMIT", "")[:8]
+        or str(int((BASE_DIR / "static" / "js" / "app.js").stat().st_mtime))
+    )
 
     JSON_AS_ASCII = False
 

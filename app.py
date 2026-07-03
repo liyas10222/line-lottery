@@ -37,6 +37,10 @@ def create_app():
     app.register_blueprint(admin_bp)
     start_daily_backup_scheduler()
 
+    @app.context_processor
+    def inject_static_asset_version():
+        return {"asset_version": Config.STATIC_ASSET_VERSION}
+
     @app.get("/")
     def home():
         return redirect("/lottery")
