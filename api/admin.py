@@ -48,7 +48,9 @@ def require_admin_token(view_func):
             return jsonify({"ok": False, "message": "管理權限不足"}), 401
 
         admin_line_user_id = request_admin_line_user_id({})
-        if admin_line_user_id and not is_admin_line_user_id(admin_line_user_id):
+        if not admin_line_user_id:
+            return jsonify({"ok": False, "message": "缺少 LINE 管理員身分"}), 403
+        if not is_admin_line_user_id(admin_line_user_id):
             return jsonify({"ok": False, "message": "LINE 管理員權限不足"}), 403
 
         return view_func(*args, **kwargs)
