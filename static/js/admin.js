@@ -108,11 +108,7 @@ function adminLogin() {
     initAdminPage();
     return;
   }
-  if (typeof liff.isInClient === "function" && liff.isInClient()) {
-    setAdminMessage("LINE 內的 LIFF 會自動登入，請重新整理或從活動連結重新開啟。", true);
-    return;
-  }
-  liff.login({ redirectUri: cleanAdminLoginRedirectUri() });
+  liff.login();
 }
 
 function adminLogout() {
@@ -190,10 +186,6 @@ async function adminFetch(url, options = {}) {
     throw new Error(data.message || `HTTP ${response.status}`);
   }
   return data;
-}
-
-function cleanAdminLoginRedirectUri() {
-  return `${window.location.origin}${window.location.pathname}`;
 }
 
 async function adminRawFetch(url, options = {}) {
