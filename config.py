@@ -16,7 +16,14 @@ class Config:
     DATABASE_PATH = os.getenv("DATABASE_PATH", "lottery.db")
     DATABASE_URL = os.getenv("DATABASE_URL", "")
     PORT = int(os.getenv("PORT", "5000"))
-    DEFAULT_DAILY_SPIN_LIMIT = int(os.getenv("DEFAULT_DAILY_SPIN_LIMIT", "1"))
+    DEFAULT_DAILY_SPIN_LIMIT = int(os.getenv("DEFAULT_DAILY_SPIN_LIMIT", "0"))
+    AUTO_BACKUP_ENABLED = os.getenv("AUTO_BACKUP_ENABLED", "true").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    AUTO_BACKUP_DIR = os.getenv("AUTO_BACKUP_DIR", "backups")
     ADMIN_API_TOKEN = os.getenv("ADMIN_API_TOKEN", "")
     ADMIN_LINE_USER_IDS = {
         item.strip()
@@ -40,6 +47,11 @@ class Config:
     LINE_LOGIN_CHANNEL_ID = os.getenv("LINE_LOGIN_CHANNEL_ID", "")
     LINE_LOGIN_CHANNEL_SECRET = os.getenv("LINE_LOGIN_CHANNEL_SECRET", "")
     LIFF_ID = os.getenv("LIFF_ID", "")
+    STATIC_ASSET_VERSION = (
+        os.getenv("STATIC_ASSET_VERSION")
+        or os.getenv("RENDER_GIT_COMMIT", "")[:8]
+        or str(int((BASE_DIR / "static" / "js" / "app.js").stat().st_mtime))
+    )
 
     JSON_AS_ASCII = False
 

@@ -3,12 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>LINE 會員抽獎</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <title>活動抽獎轉盤</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v={{ asset_version }}">
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <script>
     window.LINE_LOTTERY_CONFIG = {
-      liffId: "{{ liff_id }}"
+      liffId: "{{ liff_id }}",
+      liffUrl: "https://liff.line.me/{{ liff_id }}"
     };
   </script>
 </head>
@@ -16,27 +17,35 @@
   <main class="app-shell">
     <section class="lottery-layout" aria-live="polite">
       <div class="profile-panel">
-        <div class="profile-row">
-          <img id="avatar" class="avatar" alt="LINE 頭像" src="">
-          <div class="profile-copy">
-            <p class="eyebrow">會員抽獎</p>
-            <h1 id="displayName">會員登入中</h1>
-            <p id="userId" class="user-id">userId：讀取中</p>
+        <div class="brand-block">
+          <p class="eyebrow">活動轉盤</p>
+          <h1>抽獎轉盤</h1>
+        </div>
+
+        <div id="authLoggedOut" class="login-card">
+          <p>請使用 LINE 登入綁定抽獎資格。</p>
+          <button id="loginButton" class="line-button" type="button">LINE 登入</button>
+        </div>
+
+        <div id="authLoggedIn" class="profile-card" hidden>
+          <div class="profile-row">
+            <img id="avatar" class="avatar" alt="LINE 頭貼" src="">
+            <div class="profile-copy">
+              <span class="profile-label">會員登入</span>
+              <strong id="displayName">尚未登入</strong>
+              <p id="userId" class="user-id">userId：-</p>
+            </div>
           </div>
+          <button id="logoutButton" class="ghost-button compact-button" type="button">登出</button>
         </div>
 
         <div class="quota-box">
-          <span>今日剩餘抽獎次數</span>
+          <span>剩餘抽獎次數</span>
           <strong id="remaining">-</strong>
         </div>
 
-        <div id="message" class="message">正在連線 LINE 會員登入...</div>
+        <div id="message" class="message">正在初始化 LIFF...</div>
 
-        <div class="actions">
-          <button id="spinButton" class="primary-button" type="button" disabled>開始抽獎</button>
-          <button id="historyButton" class="ghost-button" type="button">我的中獎紀錄</button>
-          <button id="adminButton" class="ghost-button admin-only" type="button" hidden>管理功能</button>
-        </div>
       </div>
 
       <div class="wheel-panel">
@@ -44,14 +53,159 @@
           <div class="pointer" aria-hidden="true"></div>
           <div id="wheel" class="wheel" aria-hidden="true"></div>
         </div>
-        <div id="result" class="result-box">
-          <span>抽獎結果</span>
-          <strong>尚未抽獎</strong>
-        </div>
       </div>
+
+      <div class="lottery-controls-panel">
+        <div class="actions">
+          <button id="spinButton" class="primary-button" type="button" disabled>開始抽獎</button>
+          <button id="bulkDrawButton" class="primary-button secondary-primary-button" type="button" disabled>10 抽</button>
+          <button id="historyButton" class="ghost-button" type="button">我的中獎紀錄</button>
+          <button id="adminButton" class="ghost-button admin-only" type="button" hidden>管理後台</button>
+        </div>
+
+        <label class="skip-animation-control">
+          <input id="skipAnimation" type="checkbox">
+          <span>跳過動畫，直接顯示結果</span>
+        </label>
+      </div>
+
+      <div id="result" class="result-box single-result-box">
+        <span>抽獎結果</span>
+        <strong>尚未抽獎</strong>
+      </div>
+    </section>
+
+    <section class="prize-showcase-panel">
+      <details>
+        <summary>完整獎品清單</summary>
+        <div class="prize-showcase-content">
+          <p class="eyebrow">活動獎品</p>
+          <div class="prize-showcase-list">
+            <article class="prize-showcase-card">
+              <span class="prize-rank">大獎</span>
+              <img src="{{ url_for('static', filename='images/prizes/iphone-17.png') }}" alt="iPhone 17 256GB">
+              <div>
+                <h3>iPhone 17 256GB</h3>
+                <strong>*1</strong>
+              </div>
+            </article>
+
+            <article class="prize-showcase-card">
+              <span class="prize-rank">二獎</span>
+              <img src="{{ url_for('static', filename='images/prizes/switch-2-mariokart.png') }}" alt="Nintendo 任天堂 Switch 2 瑪利歐賽車世界組合包">
+              <div>
+                <h3>Nintendo 任天堂 Switch 2 瑪利歐賽車世界組合包</h3>
+                <strong>*1</strong>
+              </div>
+            </article>
+
+            <article class="prize-showcase-card">
+              <span class="prize-rank">三獎</span>
+              <img src="{{ url_for('static', filename='images/prizes/airpods-pro3.png') }}" alt="AirPods Pro3">
+              <div>
+                <h3>AirPods Pro3</h3>
+                <strong>*1</strong>
+              </div>
+            </article>
+
+            <article class="prize-showcase-card text-only">
+              <span class="prize-rank inline-rank">四獎</span>
+              <div>
+                <h3>原價3290商品兌換劵</h3>
+              </div>
+            </article>
+
+            <article class="prize-showcase-card text-only">
+              <span class="prize-rank inline-rank">五獎</span>
+              <div>
+                <h3>原價1690商品兌換劵</h3>
+              </div>
+            </article>
+
+            <article class="prize-showcase-card text-only">
+              <span class="prize-rank inline-rank">六獎</span>
+              <div>
+                <h3>原價990商品兌換劵</h3>
+              </div>
+            </article>
+
+            <article class="prize-showcase-card text-only">
+              <span class="prize-rank inline-rank">七獎</span>
+              <div>
+                <h3>原價170商品兌換劵</h3>
+              </div>
+            </article>
+
+            <article class="prize-showcase-card text-only">
+              <span class="prize-rank inline-rank">八獎</span>
+              <div>
+                <h3>30元折價券</h3>
+              </div>
+            </article>
+
+            <article class="prize-showcase-card text-only">
+              <span class="prize-rank inline-rank">九獎</span>
+              <div>
+                <h3>神秘小禮物</h3>
+              </div>
+            </article>
+
+            <article class="prize-showcase-card text-only">
+              <span class="prize-rank inline-rank">未中獎項</span>
+              <div>
+                <h3>銘謝惠顧</h3>
+              </div>
+            </article>
+          </div>
+        </div>
+      </details>
+    </section>
+
+    <section class="rules-panel">
+      <details>
+        <summary>活動規則</summary>
+        <div class="rules-content">
+          <article class="rules-official">
+            <h2>活動轉盤抽獎規則</h2>
+
+            <h3>一、活動參加方式</h3>
+            <p>凡於活動期間內，透過指定合作通路完成符合資格之消費訂單，即有機會獲得抽獎次數。每消費滿 2000 元，可獲得抽獎次數 1 次。</p>
+
+            <h3>二、會員登入與抽獎資格</h3>
+            <p>參加活動前，請先使用 LINE 登入活動頁面完成會員綁定。若尚未登入活動頁面，系統將無法取得會員資料，也就無法正常發放抽獎次數。</p>
+
+            <h3>三、抽獎次數發放</h3>
+            <p>符合資格之訂單，抽獎次數原則上將於訂單成立後隔日發放。實際發放時間可能依訂單確認、系統作業或活動狀況調整。</p>
+
+            <h3>四、中獎與兌換方式</h3>
+            <p>中獎後，系統將顯示中獎獎項與中獎序號。請截圖保存中獎畫面，並將中獎序號提供給官方 LINE 客服兌換獎品。</p>
+
+            <h3>五、獎項發放</h3>
+            <p>獎項內容、兌換方式、兌換期限與實際發放方式，請依官方 LINE 客服回覆為準。部分獎項可能需經人工確認後發放。</p>
+
+            <h3>六、兌換限制</h3>
+            <p>每組中獎序號僅限兌換一次，不得重複使用、轉售、偽造、冒用或要求折換現金。若序號遺失、截圖不完整、資料無法核對或逾期未完成兌換，可能影響兌換權益。</p>
+
+            <h3>七、身分與資格核對</h3>
+            <p>活動資格、中獎資格與兌換資格將以系統紀錄、LINE 會員資料及必要訂單資料為核對依據。若資料不符、無法確認本人身分或不符合活動資格，活動主辦單位得暫停或取消相關資格。</p>
+
+            <h3>八、異常與違規處理</h3>
+            <p>若系統偵測到異常操作、重複領取、冒用身份、惡意操作、利用漏洞或其他影響活動公平性之行為，活動主辦單位有權取消相關抽獎資格、中獎資格或獎項發放。</p>
+
+            <h3>九、系統紀錄與異常狀況</h3>
+            <p>活動相關紀錄以系統後台資料為準。若遇網路延遲、系統異常、資料同步異常、第三方服務異常、不可抗力或其他非預期狀況，活動主辦單位得依實際情況進行查核、修正或補救。</p>
+
+            <h3>十、活動調整與最終解釋權</h3>
+            <p>活動主辦單位保留本活動之修改、暫停、終止、獎項發放審核及最終解釋權。若有未盡事宜，活動主辦單位得依實際情況公告或調整。</p>
+
+            <h3>十一、官方 LINE 兌換提醒</h3>
+            <p>所有中獎獎項皆需憑中獎序號至官方 LINE 進行兌換。請務必妥善保存中獎序號，遺失、截圖不完整或無法確認者，可能影響兌換權益。</p>
+          </article>
+        </div>
+      </details>
     </section>
   </main>
 
-  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}?v={{ asset_version }}"></script>
 </body>
 </html>

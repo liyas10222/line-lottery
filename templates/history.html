@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>我的中獎紀錄</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v={{ asset_version }}">
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <script>
     window.LINE_LOTTERY_CONFIG = {
@@ -17,30 +17,34 @@
     <section class="history-layout">
       <div class="history-header">
         <div>
-          <p class="eyebrow">會員抽獎</p>
+          <p class="eyebrow">轉盤活動</p>
           <h1>我的中獎紀錄</h1>
-          <p id="historyUser" class="user-id">讀取中</p>
+          <p id="historyUser" class="user-id">正在讀取會員資料</p>
         </div>
-        <button id="backButton" class="ghost-button" type="button">返回抽獎</button>
+        <button id="backButton" class="ghost-button" type="button">回到抽獎</button>
       </div>
 
       <div id="historyMessage" class="message">正在讀取紀錄...</div>
 
-      <div class="table-wrap">
+      <div class="table-wrap history-scroll-panel">
         <table class="history-table">
           <thead>
             <tr>
               <th>獎品名稱</th>
+              <th>中獎序號</th>
               <th>抽獎時間</th>
               <th>狀態</th>
+              <th>提醒</th>
             </tr>
           </thead>
           <tbody id="historyBody"></tbody>
         </table>
       </div>
+
+      <nav id="historyPagination" class="pagination" aria-label="中獎紀錄分頁"></nav>
     </section>
   </main>
 
-  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}?v={{ asset_version }}"></script>
 </body>
 </html>

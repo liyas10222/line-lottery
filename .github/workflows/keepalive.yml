@@ -1,0 +1,26 @@
+name: Keep Production Warm
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      LOTTERY_BASE_URLS: ${{ vars.LOTTERY_BASE_URLS }}
+    steps:
+      - name: Ping production health and lottery page
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          urls="${LOTTERY_BASE_URLS:-https://lottery.687tfjog.com https://line-lottery-p16r.onrender.com}"
+
+          for base_url in $urls; do
+            base_url="${base_url%/}"
+            curl --fail --silent --show-error --location --max-time 30 --retry 2 --retry-delay 5 "$base_url/health" >/dev/null
+            curl --fail --silent --show-error --location --max-time 30 --retry 2 --retry-delay 5 "$base_url/lottery" >/dev/null
+          done

@@ -10,4 +10,6 @@ bot-line-*.json
 *service-account*.json
 credentials*.json
 *backup*.json
+backups/*.json
+imports/*.csv
 ngrok.exe

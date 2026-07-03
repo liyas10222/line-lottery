@@ -1,7 +1,6 @@
 from flask import Blueprint, jsonify, request
 
-from config import Config
-from services.lottery_service import sync_member
+from services.lottery_service import is_admin_line_user_id, sync_member
 
 
 member_bp = Blueprint("member", __name__, url_prefix="/api/member")
@@ -24,4 +23,4 @@ def sync_alias():
 @member_bp.get("/admin-status")
 def admin_status():
     line_user_id = request.args.get("lineUserId", "").strip()
-    return jsonify({"ok": True, "isAdmin": line_user_id in Config.ADMIN_LINE_USER_IDS})
+    return jsonify({"ok": True, "isAdmin": is_admin_line_user_id(line_user_id)})
