@@ -26,6 +26,17 @@
 
       <div id="historyMessage" class="message">正在讀取紀錄...</div>
 
+      <div class="history-toolbar">
+        <label>
+          紀錄篩選
+          <select id="historyStatusFilter" class="admin-input admin-select">
+            <option value="">全部紀錄</option>
+            <option value="won">中獎</option>
+            <option value="not_won">未中獎</option>
+          </select>
+        </label>
+      </div>
+
       <div class="table-wrap history-scroll-panel">
         <table class="history-table">
           <thead>

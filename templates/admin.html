@@ -71,8 +71,8 @@
             <h3>修改抽獎次數</h3>
             <label>LINE userId</label>
             <input id="memberLineUserId" class="admin-input" type="text" placeholder="Uxxxxxxxx">
-            <label>可抽次數</label>
-            <input id="memberDailyLimit" class="admin-input" type="number" min="0" step="1" placeholder="空白代表使用全域設定">
+            <label>剩餘可抽次數</label>
+            <input id="memberRemainingSpins" class="admin-input" type="number" min="0" step="1" placeholder="輸入要保留給會員的剩餘抽獎次數">
             <label class="admin-check">
               <input id="memberBlocked" type="checkbox">
               <span>封鎖此會員抽獎</span>
@@ -82,10 +82,24 @@
             <div class="admin-actions">
               <button id="loadMemberButton" class="ghost-button" type="button">讀取設定</button>
               <button id="saveMemberButton" class="primary-button" type="button">儲存設定</button>
-              <button id="resetTodayButton" class="danger-button" type="button">重置本日紀錄</button>
+              <button id="deleteMemberButton" class="danger-button" type="button">刪除用戶</button>
             </div>
             <pre id="memberOutput" class="admin-output"></pre>
           </div>
+        </section>
+
+        <section class="admin-card admin-card-wide">
+          <h2>抽獎紀錄查詢</h2>
+          <div class="admin-toolbar">
+            <input id="recordSearch" class="admin-input" type="search" placeholder="搜尋 LINE 名稱、userId、獎項或序號">
+            <select id="recordStatusFilter" class="admin-input admin-select" aria-label="抽獎紀錄狀態">
+              <option value="">全部紀錄</option>
+              <option value="won">中獎</option>
+              <option value="not_won">未中獎</option>
+            </select>
+            <button id="loadRecordsButton" class="ghost-button" type="button">查詢紀錄</button>
+          </div>
+          <div id="recordList" class="admin-list record-list admin-scroll-panel record-scroll-panel"></div>
         </section>
 
         <section class="admin-card">

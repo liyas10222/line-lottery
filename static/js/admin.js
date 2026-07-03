@@ -32,7 +32,12 @@ function bindAdmin() {
   document.getElementById("memberList").addEventListener("click", handleMemberListClick);
   document.getElementById("loadMemberButton").addEventListener("click", loadMember);
   document.getElementById("saveMemberButton").addEventListener("click", saveMember);
-  document.getElementById("resetTodayButton").addEventListener("click", resetToday);
+  document.getElementById("deleteMemberButton").addEventListener("click", deleteSelectedMember);
+  document.getElementById("loadRecordsButton").addEventListener("click", loadLotteryRecords);
+  document.getElementById("recordSearch").addEventListener("keydown", (event) => {
+    if (event.key === "Enter") loadLotteryRecords();
+  });
+  document.getElementById("recordStatusFilter").addEventListener("change", loadLotteryRecords);
   document.getElementById("sheetStatusButton").addEventListener("click", loadSheetStatus);
   document.getElementById("sheetSetupButton").addEventListener("click", setupSheet);
   document.getElementById("sheetSyncButton").addEventListener("click", syncSheet);
@@ -318,13 +323,17 @@ async function loadMembers() {
           <strong>${escapeHtml(member.displayName)}</strong>
           <span>${escapeHtml(member.lineUserId)}</span>
           <div class="member-stats">
-            <span>已抽 ${member.usedCount ?? member.todayUsed}/${member.dailyLimit}</span>
-            <span>剩餘 ${member.remaining}</span>
+            <span>已用 ${member.usedCount ?? member.todayUsed}</span>
+            <span>可抽 ${member.remaining}</span>
             <span>紀錄 ${member.lotteryRecordCount}</span>
             <span>中獎 ${member.wonRecordCount}</span>
           </div>
         </div>
-        <button class="ghost-button compact-button" data-action="edit-member" type="button">修改次數</button>
+        <div class="member-row-actions">
+          <button class="ghost-button compact-button" data-action="edit-member" type="button">修改次數</button>
+          <button class="ghost-button compact-button" data-action="view-records" type="button">查看紀錄</button>
+          <button class="danger-button compact-button" data-action="delete-member" type="button">刪除用戶</button>
+        </div>
       </div>
     `).join("") || `<div class="empty-cell">目前沒有會員資料</div>`;
     setAdminMessage("會員清單已更新。");
@@ -334,14 +343,29 @@ async function loadMembers() {
 }
 
 function handleMemberListClick(event) {
-  const button = event.target.closest("[data-action='edit-member']");
+  const button = event.target.closest("[data-action]");
   if (!button) return;
   const row = button.closest(".member-row");
   const member = adminState.members.get(row?.dataset.lineUserId || "");
   if (!member) return;
 
+  if (button.dataset.action === "view-records") {
+    document.getElementById("recordSearch").value = member.lineUserId;
+    document.getElementById("recordStatusFilter").value = "";
+    loadLotteryRecords().catch(showError);
+    setAdminMessage(`正在查詢 ${member.displayName} 的抽獎紀錄。`);
+    return;
+  }
+
+  if (button.dataset.action === "delete-member") {
+    deleteMember(member.lineUserId, member.displayName).catch(showError);
+    return;
+  }
+
+  if (button.dataset.action !== "edit-member") return;
+
   document.getElementById("memberLineUserId").value = member.lineUserId;
-  document.getElementById("memberDailyLimit").value = member.dailyLimit ?? "";
+  document.getElementById("memberRemainingSpins").value = member.remaining ?? 0;
   document.getElementById("memberBlocked").checked = member.isBlocked;
   document.getElementById("memberNote").value = member.note || "";
   setOutput("memberOutput", member);
@@ -352,7 +376,7 @@ async function loadMember() {
   const lineUserId = memberId();
   try {
     const data = await adminFetch(`/api/admin/members/${encodeURIComponent(lineUserId)}/spin-limit`);
-    document.getElementById("memberDailyLimit").value = data.quota.dailyLimit;
+    document.getElementById("memberRemainingSpins").value = data.quota.remaining;
     document.getElementById("memberBlocked").checked = data.quota.isBlocked;
     setOutput("memberOutput", data);
     setAdminMessage("會員抽獎設定已讀取。");
@@ -363,9 +387,9 @@ async function loadMember() {
 
 async function saveMember() {
   const lineUserId = memberId();
-  const dailyLimitValue = document.getElementById("memberDailyLimit").value;
+  const remainingValue = document.getElementById("memberRemainingSpins").value;
   const payload = {
-    dailyLimit: dailyLimitValue === "" ? null : Number(dailyLimitValue),
+    remainingSpins: remainingValue === "" ? 0 : Number(remainingValue),
     isBlocked: document.getElementById("memberBlocked").checked,
     note: document.getElementById("memberNote").value.trim(),
   };
@@ -376,28 +400,68 @@ async function saveMember() {
       body: JSON.stringify(payload),
     });
     setOutput("memberOutput", data);
-    setAdminMessage("會員抽獎次數已儲存。");
+    setAdminMessage(`會員剩餘可抽次數已儲存為 ${data.quota.remaining} 次。`);
     await loadMembers();
   } catch (error) {
     showError(error);
   }
 }
 
-async function resetToday() {
+async function deleteSelectedMember() {
   const lineUserId = memberId();
-  if (!window.confirm(`確定重置 ${lineUserId} 本日抽獎紀錄？`)) return;
+  await deleteMember(lineUserId);
+}
+
+async function deleteMember(lineUserId, displayName = "") {
+  const label = displayName ? `${displayName} / ${lineUserId}` : lineUserId;
+  if (!window.confirm(`確定刪除用戶 ${label}？抽獎紀錄會保留供營運查核。`)) return;
 
   try {
-    const data = await adminFetch(`/api/admin/members/${encodeURIComponent(lineUserId)}/daily-spin/reset`, {
-      method: "POST",
-      body: JSON.stringify({}),
-    });
+    const data = await adminFetch(`/api/admin/members/${encodeURIComponent(lineUserId)}`, { method: "DELETE" });
     setOutput("memberOutput", data);
-    setAdminMessage("本日抽獎紀錄已重置。");
+    setAdminMessage("用戶資料已刪除，抽獎紀錄已保留。");
+    document.getElementById("memberLineUserId").value = "";
+    document.getElementById("memberRemainingSpins").value = "";
+    document.getElementById("memberNote").value = "";
+    document.getElementById("memberBlocked").checked = false;
     await loadMembers();
   } catch (error) {
     showError(error);
   }
+}
+
+async function loadLotteryRecords() {
+  try {
+    const q = document.getElementById("recordSearch").value.trim();
+    const status = document.getElementById("recordStatusFilter").value;
+    const params = new URLSearchParams({ limit: "200" });
+    if (q) params.set("q", q);
+    if (status) params.set("status", status);
+    const data = await adminFetch(`/api/admin/lottery-records?${params.toString()}`);
+    const list = document.getElementById("recordList");
+    list.innerHTML = data.records.map(renderLotteryRecordRow).join("") || `<div class="empty-cell">查無抽獎紀錄</div>`;
+    setAdminMessage(`抽獎紀錄已更新，共 ${data.records.length} 筆。`);
+  } catch (error) {
+    showError(error);
+  }
+}
+
+function renderLotteryRecordRow(record) {
+  const statusClass = record.status === "won" ? "is-active" : "is-muted";
+  return `
+    <div class="admin-row record-row">
+      ${record.pictureUrl
+        ? `<img class="member-avatar" alt="" src="${escapeHtml(record.pictureUrl)}">`
+        : `<div class="member-avatar member-avatar-placeholder">${escapeHtml((record.displayName || "?").slice(0, 1))}</div>`}
+      <div class="record-main">
+        <strong>${escapeHtml(record.prizeName)}</strong>
+        <span>${escapeHtml(record.displayName || "-")} / ${escapeHtml(record.lineUserId)}</span>
+        <span>序號：${escapeHtml(record.serialCode || "-")}</span>
+        <span>${escapeHtml(formatDateTime(record.createdAt))}</span>
+      </div>
+      <span class="status-pill ${statusClass}">${escapeHtml(formatRecordStatus(record.status))}</span>
+    </div>
+  `;
 }
 
 async function loadSheetStatus() {
@@ -432,7 +496,7 @@ async function syncSheet() {
 }
 
 async function rebuildSheet() {
-  const confirmed = window.confirm("重建獎池會清空目前獎項、序號、抽獎紀錄與本日抽數，再由 Google Sheet 重建。確定要繼續？");
+  const confirmed = window.confirm("重建獎池會清空目前獎項、序號與抽獎紀錄，再由 Google Sheet 重建。確定要繼續？");
   if (!confirmed) return;
 
   try {
@@ -792,6 +856,26 @@ function formatNumber(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) return value ?? "-";
   return number.toLocaleString("zh-TW", { maximumFractionDigits: 2 });
+}
+
+function formatRecordStatus(status) {
+  if (status === "won") return "中獎";
+  if (status === "not_won") return "未中獎";
+  return status || "-";
+}
+
+function formatDateTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value || "-";
+  return new Intl.DateTimeFormat("zh-TW", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(date);
 }
 
 function escapeHtml(value) {

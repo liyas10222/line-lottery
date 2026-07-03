@@ -10,6 +10,7 @@ from services.lottery_service import (
     now_iso,
 )
 from services.operation_log_service import write_operation_log
+from services.google_sheet_service import upsert_prize_rows_to_google_sheet
 
 
 CSV_HEADERS = [
@@ -316,6 +317,56 @@ def import_prize_csv(csv_text):
             db.rollback()
             raise
 
+    sheet_rows = [
+        {
+            "prizeCode": row["prizeCode"],
+            "prizeName": row["prizeName"],
+            "shortLabel": row["shortLabel"],
+            "weight": row["weight"],
+            "stock": row["stock"],
+            "requiresSerial": row["requiresSerial"],
+            "isActive": row["isActive"],
+            "serialCode": row["serialCode"],
+        }
+        for row in rows
+    ]
+    try:
+        sheet_result, sheet_status = upsert_prize_rows_to_google_sheet(sheet_rows)
+        if sheet_result.get("ok"):
+            row_numbers_by_serial = sheet_result.get("rowNumbersBySerial") or {}
+            if row_numbers_by_serial:
+                with get_db() as db:
+                    for serial_code, source_row in row_numbers_by_serial.items():
+                        db.execute(
+                            """
+                            UPDATE prize_serials
+                            SET source_sheet = ?,
+                                source_row = ?,
+                                updated_at = ?
+                            WHERE serial_code = ?
+                              AND status = 'available'
+                            """,
+                            ("google_sheet", source_row, timestamp, serial_code),
+                        )
+                    db.commit()
+        else:
+            write_operation_log(
+                "google_sheet_prize_upsert",
+                level="error",
+                message="CSV import committed but Google Sheet upsert failed",
+                payload={"statusCode": sheet_status, "result": sheet_result},
+            )
+    except Exception as error:
+        sheet_status = 500
+        sheet_result = {"ok": False, "message": str(error)}
+        write_operation_log(
+            "google_sheet_prize_upsert",
+            level="error",
+            message="CSV import committed but Google Sheet upsert crashed",
+            payload={"error": str(error)},
+        )
+
+    stats["sheetWriteback"] = {"statusCode": sheet_status, **sheet_result}
     result = {"ok": True, "importedAt": timestamp, "summary": stats}
     write_operation_log("admin_prize_csv_import", message="CSV import completed", payload=result)
     return result, 200

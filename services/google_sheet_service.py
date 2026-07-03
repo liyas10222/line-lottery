@@ -471,6 +471,159 @@ def ensure_control_sheet():
     }, 200
 
 
+def bool_to_sheet_label(value):
+    return "是" if bool(value) else "否"
+
+
+def prize_sheet_row(row):
+    serial_code = clean_text(row.get("serialCode"), 120)
+    return [
+        clean_text(row.get("prizeCode") or row.get("code"), 80),
+        clean_text(row.get("prizeName") or row.get("name"), 120),
+        clean_text(row.get("shortLabel") or row.get("short_label"), 24),
+        row.get("weight", ""),
+        "" if row.get("stock") is None else row.get("stock"),
+        bool_to_sheet_label(row.get("isActive", True)),
+        bool_to_sheet_label(row.get("requiresSerial", bool(serial_code))),
+        serial_code,
+        SHEET_AVAILABLE_LABEL if serial_code else "",
+        "",
+        "",
+        "",
+        clean_text(row.get("sourceOrderNo"), 80),
+        clean_text(row.get("note"), 500),
+        "",
+    ]
+
+
+def parse_start_row_from_range(range_text):
+    match = re.search(r"![A-Z]+(\d+)", range_text or "")
+    return int(match.group(1)) if match else None
+
+
+def upsert_prize_rows_to_google_sheet(rows):
+    rows = [row for row in rows if clean_text(row.get("prizeCode") or row.get("code"), 80)]
+    if not rows:
+        return {"ok": True, "skipped": True, "message": "No rows to write"}, 200
+
+    setup_result, setup_status = ensure_control_sheet()
+    if setup_status != 200 or not setup_result.get("ok"):
+        return setup_result, setup_status
+
+    session, error = get_authorized_session(scopes=[SHEETS_SCOPE])
+    if error:
+        return {"ok": False, "message": error}, 500
+
+    sheet_title, error = get_sheet_title(session)
+    if error:
+        return {"ok": False, "message": error}, 502
+
+    escaped_title = sheet_title.replace("'", "''")
+    read_range = f"'{escaped_title}'!A:O"
+    range_name = urllib.parse.quote(read_range, safe="")
+    url = (
+        f"https://sheets.googleapis.com/v4/spreadsheets/{Config.GOOGLE_SHEET_ID}"
+        f"/values/{range_name}?majorDimension=ROWS"
+    )
+    data, error = request_google_json(session, url)
+    if error:
+        return {"ok": False, "message": error}, 502
+
+    values = data.get("values", [])
+    existing_by_serial = {}
+    existing_no_serial_by_code = {}
+    for row_number, sheet_row in enumerate(values[1:], start=2):
+        code = clean_text(sheet_row[0] if len(sheet_row) > 0 else "", 80)
+        serial_code = clean_text(sheet_row[7] if len(sheet_row) > 7 else "", 120)
+        if serial_code:
+            existing_by_serial[serial_code] = row_number
+        elif code and code not in existing_no_serial_by_code:
+            existing_no_serial_by_code[code] = row_number
+
+    updates = []
+    append_values = []
+    append_serials = []
+    row_numbers_by_serial = {}
+
+    for item in rows:
+        sheet_row = prize_sheet_row(item)
+        code = sheet_row[0]
+        serial_code = sheet_row[7]
+        target_row = existing_by_serial.get(serial_code) if serial_code else existing_no_serial_by_code.get(code)
+
+        if target_row:
+            updates.append(
+                {
+                    "range": f"'{escaped_title}'!A{target_row}:G{target_row}",
+                    "majorDimension": "ROWS",
+                    "values": [sheet_row[:7]],
+                }
+            )
+            updates.append(
+                {
+                    "range": f"'{escaped_title}'!M{target_row}:N{target_row}",
+                    "majorDimension": "ROWS",
+                    "values": [[sheet_row[12], sheet_row[13]]],
+                }
+            )
+            if serial_code:
+                row_numbers_by_serial[serial_code] = target_row
+            continue
+
+        append_values.append(sheet_row)
+        append_serials.append(serial_code)
+
+    total_updated_rows = 0
+    total_updated_cells = 0
+    if updates:
+        batch_url = f"https://sheets.googleapis.com/v4/spreadsheets/{Config.GOOGLE_SHEET_ID}/values:batchUpdate"
+        for start in range(0, len(updates), 500):
+            payload = {"valueInputOption": "RAW", "data": updates[start : start + 500]}
+            result, error = send_google_json(session, "POST", batch_url, payload)
+            if error:
+                return {"ok": False, "message": error}, 502
+            total_updated_rows += result.get("totalUpdatedRows", 0)
+            total_updated_cells += result.get("totalUpdatedCells", 0)
+
+    appended_rows = 0
+    appended_cells = 0
+    if append_values:
+        append_range = urllib.parse.quote(f"'{escaped_title}'!A:O", safe="")
+        append_url = (
+            f"https://sheets.googleapis.com/v4/spreadsheets/{Config.GOOGLE_SHEET_ID}"
+            f"/values/{append_range}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS"
+        )
+        result, error = send_google_json(
+            session,
+            "POST",
+            append_url,
+            {"majorDimension": "ROWS", "values": append_values},
+        )
+        if error:
+            return {"ok": False, "message": error}, 502
+
+        updates_result = result.get("updates", {})
+        appended_rows = updates_result.get("updatedRows", 0)
+        appended_cells = updates_result.get("updatedCells", 0)
+        start_row = parse_start_row_from_range(updates_result.get("updatedRange"))
+        if start_row:
+            for offset, serial_code in enumerate(append_serials):
+                if serial_code:
+                    row_numbers_by_serial[serial_code] = start_row + offset
+
+    result = {
+        "ok": True,
+        "sheetName": sheet_title,
+        "updatedRows": total_updated_rows,
+        "updatedCells": total_updated_cells,
+        "appendedRows": appended_rows,
+        "appendedCells": appended_cells,
+        "rowNumbersBySerial": row_numbers_by_serial,
+    }
+    write_operation_log("google_sheet_prize_upsert", message="Prize rows upserted to Google Sheet", payload=result)
+    return result, 200
+
+
 def rows_from_values(values):
     if not values:
         return []

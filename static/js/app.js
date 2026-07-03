@@ -45,6 +45,7 @@ const state = {
   spinning: false,
   historyRecords: [],
   historyPage: 1,
+  historyStatusFilter: "",
 };
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -76,6 +77,11 @@ async function initHistoryPage() {
     window.location.href = "/lottery";
   });
   document.getElementById("historyPagination").addEventListener("click", handleHistoryPagination);
+  document.getElementById("historyStatusFilter").addEventListener("change", (event) => {
+    state.historyStatusFilter = event.target.value;
+    state.historyPage = 1;
+    renderHistoryPage();
+  });
 
   await initLiff();
   const profile = await loadLineProfile({ allowStoredProfile: true });
@@ -640,7 +646,8 @@ function sortRecordsNewestFirst(records) {
 
 function renderHistoryPage() {
   const body = document.getElementById("historyBody");
-  const total = state.historyRecords.length;
+  const filteredRecords = filteredHistoryRecords();
+  const total = filteredRecords.length;
   const totalPages = Math.max(1, Math.ceil(total / HISTORY_PAGE_SIZE));
   state.historyPage = Math.min(Math.max(1, state.historyPage), totalPages);
 
@@ -653,7 +660,7 @@ function renderHistoryPage() {
   }
 
   const start = (state.historyPage - 1) * HISTORY_PAGE_SIZE;
-  const records = state.historyRecords.slice(start, start + HISTORY_PAGE_SIZE);
+  const records = filteredRecords.slice(start, start + HISTORY_PAGE_SIZE);
   for (const record of records) {
     const serialText = record.serialCode || "-";
     const hasPrize = record.status === "won";
@@ -670,6 +677,11 @@ function renderHistoryPage() {
 
   setHistoryMessage(`共 ${total} 筆紀錄，第 ${state.historyPage} / ${totalPages} 頁。`);
   renderHistoryPagination(totalPages);
+}
+
+function filteredHistoryRecords() {
+  if (!state.historyStatusFilter) return state.historyRecords;
+  return state.historyRecords.filter((record) => record.status === state.historyStatusFilter);
 }
 
 function renderHistoryPagination(totalPages) {

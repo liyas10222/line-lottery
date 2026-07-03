@@ -16,10 +16,12 @@ from services.lottery_service import (
     add_prize_serials,
     add_admin_line_user,
     delete_admin_line_user,
+    delete_member,
     get_admin_prizes,
     get_member_spin_limit,
     is_admin_line_user_id,
     list_admin_line_users,
+    list_lottery_records,
     list_members,
     list_prize_serials,
     reset_member_daily_spin,
@@ -117,6 +119,21 @@ def prize_import():
 @require_admin_token
 def members():
     result, status_code = list_members(request.args)
+    return jsonify(result), status_code
+
+
+@admin_bp.delete("/members/<line_user_id>")
+@require_admin_token
+def remove_member(line_user_id):
+    result, status_code = delete_member(line_user_id)
+    log_admin_action("admin_member_delete", result, status_code, {"lineUserId": line_user_id}, "Member deleted")
+    return jsonify(result), status_code
+
+
+@admin_bp.get("/lottery-records")
+@require_admin_token
+def lottery_records():
+    result, status_code = list_lottery_records(request.args)
     return jsonify(result), status_code
 
 

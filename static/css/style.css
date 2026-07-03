@@ -270,7 +270,8 @@ h3 {
 
 .actions,
 .admin-actions,
-.admin-toolbar {
+.admin-toolbar,
+.history-toolbar {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
@@ -810,6 +811,10 @@ h3 {
   color: var(--text);
 }
 
+.admin-select {
+  appearance: none;
+}
+
 .admin-input:focus {
   outline: 2px solid rgba(25, 214, 107, .36);
   outline-offset: 1px;
@@ -857,7 +862,8 @@ h3 {
 
 .admin-list,
 .member-list,
-.prize-list {
+.prize-list,
+.record-list {
   display: grid;
   gap: 10px;
 }
@@ -876,6 +882,12 @@ h3 {
 .member-scroll-panel {
   max-height: 420px;
   min-height: 220px;
+  overscroll-behavior: contain;
+}
+
+.record-scroll-panel {
+  max-height: 520px;
+  min-height: 240px;
   overscroll-behavior: contain;
 }
 
@@ -900,6 +912,41 @@ h3 {
 
 .member-row .compact-button {
   grid-column: 1 / -1;
+}
+
+.member-row-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.record-row {
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.record-main {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.record-main strong,
+.record-main span {
+  overflow-wrap: anywhere;
+}
+
+.history-toolbar {
+  justify-content: flex-end;
+}
+
+.history-toolbar label {
+  width: min(100%, 260px);
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+  font-size: .9rem;
 }
 
 .member-stats,
@@ -983,6 +1030,11 @@ h3 {
 
   .member-row .compact-button {
     grid-column: auto;
+  }
+
+  .member-row-actions {
+    grid-column: auto;
+    justify-content: flex-end;
   }
 
   .admin-toolbar {
@@ -1166,6 +1218,20 @@ h3 {
   .member-scroll-panel {
     max-height: 360px;
     min-height: 180px;
+  }
+
+  .record-scroll-panel {
+    max-height: 420px;
+    min-height: 220px;
+  }
+
+  .record-row {
+    grid-template-columns: 44px minmax(0, 1fr);
+  }
+
+  .record-row .status-pill {
+    grid-column: 1 / -1;
+    justify-self: start;
   }
 
   .tall-scroll-panel {

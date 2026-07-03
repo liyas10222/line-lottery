@@ -209,6 +209,7 @@ def get_member_quota(db, line_user_id):
     return {
         "date": current_date,
         "dailyLimit": daily_limit,
+        "totalLimit": daily_limit,
         "used": used_count,
         "remaining": remaining,
         "canSpin": remaining > 0,
@@ -229,6 +230,7 @@ def get_lottery_status(line_user_id):
         "canSpin": quota["canSpin"],
         "remaining": quota["remaining"],
         "dailyLimit": quota["dailyLimit"],
+        "totalLimit": quota["totalLimit"],
         "used": quota["used"],
         "isBlocked": quota["isBlocked"],
     }, 200
@@ -953,6 +955,7 @@ def list_members(filters):
                 "todayUsed": used_count,
                 "usedCount": used_count,
                 "dailyLimit": daily_limit,
+                "totalLimit": daily_limit,
                 "remaining": remaining,
                 "isBlocked": bool(row["is_blocked"]),
                 "note": row["note"],
@@ -962,6 +965,114 @@ def list_members(filters):
         )
 
     return {"ok": True, "date": current_date, "members": members}, 200
+
+
+def delete_member(line_user_id):
+    line_user_id = validate_line_user_id(line_user_id)
+    if not line_user_id:
+        return {"ok": False, "message": "缺少 lineUserId"}, 400
+
+    timestamp = now_iso()
+    with get_db() as db:
+        member = db.execute(
+            "SELECT line_user_id, display_name FROM members WHERE line_user_id = ?",
+            (line_user_id,),
+        ).fetchone()
+        if member is None:
+            return {"ok": False, "message": "找不到會員"}, 404
+
+        db.execute("DELETE FROM member_spin_limits WHERE line_user_id = ?", (line_user_id,))
+        db.execute("DELETE FROM daily_spin WHERE line_user_id = ?", (line_user_id,))
+        cursor = db.execute("DELETE FROM members WHERE line_user_id = ?", (line_user_id,))
+        db.commit()
+
+    result = {
+        "ok": True,
+        "deletedAt": timestamp,
+        "lineUserId": line_user_id,
+        "displayName": member["display_name"],
+        "deletedMembers": cursor.rowcount,
+        "recordsPreserved": True,
+    }
+    write_operation_log(
+        "admin_member_delete",
+        line_user_id=line_user_id,
+        message="Member profile deleted; lottery records preserved",
+        payload=result,
+    )
+    return result, 200
+
+
+def list_lottery_records(filters):
+    try:
+        limit = min(max(int(filters.get("limit", 100)), 1), 500)
+    except (TypeError, ValueError):
+        limit = 100
+
+    keyword = clean_text(filters.get("q"), 160)
+    line_user_id = validate_line_user_id(filters.get("lineUserId"))
+    status = clean_text(filters.get("status"), 30)
+
+    where = []
+    values = []
+    if line_user_id:
+        where.append("lr.line_user_id = ?")
+        values.append(line_user_id)
+    if status in {"won", "not_won"}:
+        where.append("lr.status = ?")
+        values.append(status)
+    if keyword:
+        where.append(
+            """
+            (
+                LOWER(lr.line_user_id) LIKE ?
+                OR LOWER(COALESCE(lr.line_display_name, '')) LIKE ?
+                OR LOWER(lr.prize_name) LIKE ?
+                OR LOWER(COALESCE(lr.serial_code, '')) LIKE ?
+            )
+            """
+        )
+        like = f"%{keyword.lower()}%"
+        values.extend([like, like, like, like])
+
+    where_sql = "WHERE " + " AND ".join(where) if where else ""
+    with get_db() as db:
+        rows = db.execute(
+            f"""
+            SELECT
+                lr.id,
+                lr.line_user_id,
+                COALESCE(lr.line_display_name, m.display_name, '') AS line_display_name,
+                m.picture_url,
+                lr.prize_name,
+                lr.prize_code,
+                lr.serial_code,
+                lr.status,
+                lr.created_at
+            FROM lottery_records lr
+            LEFT JOIN members m ON m.line_user_id = lr.line_user_id
+            {where_sql}
+            ORDER BY lr.created_at DESC, lr.id DESC
+            LIMIT ?
+            """,
+            [*values, limit],
+        ).fetchall()
+
+    records = [
+        {
+            "id": row["id"],
+            "lineUserId": row["line_user_id"],
+            "displayName": row["line_display_name"],
+            "pictureUrl": row["picture_url"],
+            "prizeName": row["prize_name"],
+            "prizeCode": row["prize_code"],
+            "serialCode": row["serial_code"],
+            "status": row["status"],
+            "createdAt": row["created_at"],
+        }
+        for row in rows
+    ]
+    return {"ok": True, "records": records}, 200
 
 
 def is_admin_line_user_id(line_user_id):
@@ -1129,16 +1240,35 @@ def set_member_spin_limit(line_user_id, payload):
     if not line_user_id:
         return {"ok": False, "message": "缺少 lineUserId"}, 400
 
-    try:
-        daily_limit = as_optional_int(payload.get("dailyLimit"), minimum=0)
-    except (TypeError, ValueError):
-        return {"ok": False, "message": "dailyLimit 必須是 0 以上整數或 null"}, 400
-
     is_blocked = as_bool(payload.get("isBlocked", False))
     note = clean_text(payload.get("note"), 500)
     timestamp = now_iso()
 
     with get_db() as db:
+        used_row = db.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM lottery_records
+            WHERE line_user_id = ?
+            """,
+            (line_user_id,),
+        ).fetchone()
+        used_count = used_row["count"] if used_row else 0
+
+        if "remainingSpins" in payload:
+            try:
+                remaining_spins = as_optional_int(payload.get("remainingSpins"), minimum=0)
+            except (TypeError, ValueError):
+                return {"ok": False, "message": "remainingSpins 必須是 0 以上整數"}, 400
+            if remaining_spins is None:
+                return {"ok": False, "message": "缺少 remainingSpins"}, 400
+            daily_limit = used_count + remaining_spins
+        else:
+            try:
+                daily_limit = as_optional_int(payload.get("dailyLimit"), minimum=0)
+            except (TypeError, ValueError):
+                return {"ok": False, "message": "dailyLimit 必須是 0 以上整數或 null"}, 400
+
         db.execute(
             """
             INSERT INTO member_spin_limits
@@ -1210,8 +1340,16 @@ def add_prize_serials(prize_id, payload):
     timestamp = now_iso()
     created = []
     skipped = []
+    sheet_rows = []
     with get_db() as db:
-        prize = db.execute("SELECT id FROM prizes WHERE id = ?", (prize_id,)).fetchone()
+        prize = db.execute(
+            """
+            SELECT id, name, code, short_label, weight, stock, requires_serial, is_active
+            FROM prizes
+            WHERE id = ?
+            """,
+            (prize_id,),
+        ).fetchone()
         if not prize:
             return {"ok": False, "message": "找不到獎項"}, 404
 
@@ -1240,12 +1378,67 @@ def add_prize_serials(prize_id, payload):
             )
             if cursor.rowcount:
                 created.append(serial_code)
+                sheet_rows.append(
+                    {
+                        "prizeCode": prize["code"],
+                        "prizeName": prize["name"],
+                        "shortLabel": prize["short_label"] or prize["name"],
+                        "weight": prize["weight"],
+                        "stock": prize["stock"],
+                        "requiresSerial": bool(prize["requires_serial"]),
+                        "isActive": bool(prize["is_active"]),
+                        "serialCode": serial_code,
+                        "sourceOrderNo": clean_text(item.get("sourceOrderNo") or payload.get("sourceOrderNo"), 80),
+                        "note": clean_text(item.get("note") or payload.get("note"), 500),
+                    }
+                )
             else:
                 skipped.append({"serialCode": serial_code, "reason": "duplicate"})
 
         db.commit()
 
-    return {"ok": True, "created": created, "skipped": skipped}, 200
+    sheet_writeback = {"ok": True, "skipped": True, "message": "No new serials to write"}
+    if sheet_rows:
+        try:
+            from services.google_sheet_service import upsert_prize_rows_to_google_sheet
+
+            sheet_writeback, sheet_status = upsert_prize_rows_to_google_sheet(sheet_rows)
+            if sheet_writeback.get("ok"):
+                row_numbers_by_serial = sheet_writeback.get("rowNumbersBySerial") or {}
+                if row_numbers_by_serial:
+                    with get_db() as db:
+                        for serial_code, source_row in row_numbers_by_serial.items():
+                            db.execute(
+                                """
+                                UPDATE prize_serials
+                                SET source_sheet = ?,
+                                    source_row = ?,
+                                    updated_at = ?
+                                WHERE serial_code = ?
+                                  AND status = 'available'
+                                """,
+                                ("google_sheet", source_row, timestamp, serial_code),
+                            )
+                        db.commit()
+            else:
+                write_operation_log(
+                    "google_sheet_prize_upsert",
+                    level="error",
+                    message="Prize serials committed but Google Sheet upsert failed",
+                    payload={"statusCode": sheet_status, "result": sheet_writeback, "created": created},
+                )
+            sheet_writeback = {"statusCode": sheet_status, **sheet_writeback}
+        except Exception as error:
+            LOGGER.exception("Google Sheet upsert failed after serials were committed")
+            sheet_writeback = {"ok": False, "message": str(error)}
+            write_operation_log(
+                "google_sheet_prize_upsert",
+                level="error",
+                message="Prize serials committed but Google Sheet upsert crashed",
+                payload={"error": str(error), "created": created},
+            )
+
+    return {"ok": True, "created": created, "skipped": skipped, "sheetWriteback": sheet_writeback}, 200
 
 
 def list_prize_serials(filters):
