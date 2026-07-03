@@ -57,6 +57,11 @@ function bindAdmin() {
 async function initAdminPage() {
   const ready = await initLiff();
   if (!ready || !liff.isLoggedIn()) {
+    if (ready && isAdminLiffLaunchContext() && !sessionStorage.getItem("lineLotteryAdminLoginRetry")) {
+      sessionStorage.setItem("lineLotteryAdminLoginRetry", "1");
+      startAdminLiffLogin();
+      return;
+    }
     renderAdminLocked("請先使用 LINE 登入確認管理員身分。");
     return;
   }
@@ -68,6 +73,7 @@ async function initAdminPage() {
       displayName: profile.displayName,
       pictureUrl: profile.pictureUrl || "",
     };
+    sessionStorage.removeItem("lineLotteryAdminLoginRetry");
     await syncMember(adminState.profile);
     const status = await fetchJson(`/api/member/admin-status?lineUserId=${encodeURIComponent(adminState.profile.lineUserId)}`);
     adminState.isAdmin = Boolean(status.ok && status.isAdmin);
@@ -116,6 +122,10 @@ async function adminLogin() {
     initAdminPage();
     return;
   }
+  if (isAdminLiffLaunchContext()) {
+    startAdminLiffLogin();
+    return;
+  }
   openAdminLiffEntry();
 }
 
@@ -125,6 +135,8 @@ function adminLogout() {
   }
   adminState.profile = null;
   adminState.isAdmin = false;
+  sessionStorage.removeItem("lineLotteryAdminLoginRetry");
+  sessionStorage.removeItem("lineLotteryPostLogin");
   renderAdminLocked("已登出 LINE 管理員。");
 }
 
@@ -135,7 +147,35 @@ function openAdminLiffEntry() {
     return;
   }
   setAdminMessage("正在開啟 LINE 登入...");
+  sessionStorage.setItem("lineLotteryPostLogin", "admin");
   window.location.href = liffUrl;
+}
+
+function startAdminLiffLogin() {
+  if (!adminState.liffReady || !window.liff) {
+    openAdminLiffEntry();
+    return;
+  }
+
+  try {
+    setAdminMessage("正在開啟 LINE 登入...");
+    sessionStorage.setItem("lineLotteryPostLogin", "admin");
+    liff.login({ redirectUri: buildAdminLoginRedirectUri() });
+  } catch (error) {
+    console.error(error);
+    setAdminMessage("LINE 登入尚未準備完成，請稍後再試。", true);
+  }
+}
+
+function buildAdminLoginRedirectUri() {
+  const url = new URL("/lottery", window.location.origin);
+  url.searchParams.set("next", "admin");
+  return url.toString();
+}
+
+function isAdminLiffLaunchContext() {
+  const params = new URLSearchParams(window.location.search);
+  return Array.from(params.keys()).some((key) => key.startsWith("liff."));
 }
 
 function renderAdminLocked(message, isError = false) {

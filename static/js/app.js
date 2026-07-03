@@ -65,6 +65,11 @@ async function initLotteryPage() {
 
   const liffReady = await initLiff();
   if (!liffReady || !liff.isLoggedIn()) {
+    if (liffReady && isLiffLaunchContext() && !sessionStorage.getItem("lineLotteryLoginRetry")) {
+      sessionStorage.setItem("lineLotteryLoginRetry", "1");
+      startLiffLogin();
+      return;
+    }
     renderLoggedOut();
     return;
   }
@@ -144,6 +149,10 @@ async function loginWithLine() {
     completeLogin();
     return;
   }
+  if (isLiffLaunchContext()) {
+    startLiffLogin();
+    return;
+  }
   openLiffEntry();
 }
 
@@ -152,6 +161,8 @@ function logoutLine() {
     liff.logout();
   }
   sessionStorage.removeItem("lineLotteryProfile");
+  sessionStorage.removeItem("lineLotteryLoginRetry");
+  sessionStorage.removeItem("lineLotteryPostLogin");
   state.profile = null;
   state.canSpin = false;
   state.remaining = 0;
@@ -169,6 +180,45 @@ function openLiffEntry() {
   window.location.href = liffUrl;
 }
 
+function startLiffLogin(extraParams = {}) {
+  if (!state.liffReady || !window.liff) {
+    openLiffEntry();
+    return;
+  }
+
+  try {
+    setMessage("正在開啟 LINE 登入...");
+    liff.login({ redirectUri: buildLotteryRedirectUri(extraParams) });
+  } catch (error) {
+    console.error(error);
+    setMessage("LINE 登入尚未準備完成，請稍後再試。", true);
+  }
+}
+
+function buildLotteryRedirectUri(extraParams = {}) {
+  const url = new URL("/lottery", window.location.origin);
+  Object.entries(extraParams).forEach(([key, value]) => {
+    if (value) url.searchParams.set(key, value);
+  });
+  return url.toString();
+}
+
+function isLiffLaunchContext() {
+  const params = new URLSearchParams(window.location.search);
+  return Array.from(params.keys()).some((key) => key.startsWith("liff."));
+}
+
+function handlePostLoginRedirect() {
+  const params = new URLSearchParams(window.location.search);
+  const storedNext = sessionStorage.getItem("lineLotteryPostLogin");
+  if (params.get("next") === "admin" || storedNext === "admin") {
+    sessionStorage.removeItem("lineLotteryPostLogin");
+    window.location.replace("/admin");
+    return true;
+  }
+  return false;
+}
+
 async function completeLogin() {
   const profile = await loadLineProfile();
   if (!profile) {
@@ -176,6 +226,7 @@ async function completeLogin() {
     return;
   }
 
+  sessionStorage.removeItem("lineLotteryLoginRetry");
   state.profile = profile;
   sessionStorage.setItem("lineLotteryProfile", JSON.stringify(profile));
   renderLoggedIn(profile);
@@ -184,6 +235,7 @@ async function completeLogin() {
     await syncMember(profile);
     await refreshStatus();
     await renderAdminEntry(profile.lineUserId);
+    handlePostLoginRedirect();
   } catch (error) {
     console.error(error);
     setMessage("會員資料同步失敗，請重新整理後再試。", true);
