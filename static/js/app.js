@@ -116,7 +116,7 @@ async function initLiff() {
   if (state.liffReady) return true;
 
   try {
-    await liff.init({ liffId, withLoginOnExternalBrowser: true });
+    await liff.init({ liffId });
     state.liffReady = true;
     return true;
   } catch (error) {
@@ -131,7 +131,15 @@ function loginWithLine() {
     setMessage("LINE 登入尚未準備完成，請稍後再試。", true);
     return;
   }
-  liff.login({ redirectUri: window.location.href });
+  if (liff.isLoggedIn()) {
+    completeLogin();
+    return;
+  }
+  if (typeof liff.isInClient === "function" && liff.isInClient()) {
+    setMessage("LINE 內的 LIFF 會自動登入，請重新整理或從活動連結重新開啟。", true);
+    return;
+  }
+  liff.login({ redirectUri: cleanLoginRedirectUri() });
 }
 
 function logoutLine() {
@@ -144,6 +152,10 @@ function logoutLine() {
   state.remaining = 0;
   renderLoggedOut();
   setMessage("已登出 LINE。");
+}
+
+function cleanLoginRedirectUri() {
+  return `${window.location.origin}${window.location.pathname}`;
 }
 
 async function completeLogin() {
