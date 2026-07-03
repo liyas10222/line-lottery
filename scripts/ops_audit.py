@@ -372,6 +372,43 @@ def run_concurrency_race(client):
     return {"counts": dict(counts), "serials": serials, "duplicateSerials": len(serials) - len(set(serials)), "errors": errors[:5]}
 
 
+def run_same_member_race(client):
+    _, _, spin_lottery, sync_member = get_services()
+    seed_prizes(big_weight=0.0, mystery_serials=0, coupon30_serials=50)
+
+    line_user_id = "USAME_MEMBER_RACE"
+    sync_member({"lineUserId": line_user_id, "displayName": "同會員併發"})
+    grant_spins(client, line_user_id, 1)
+
+    def race_spin():
+        return spin_lottery({"lineUserId": line_user_id, "displayName": "同會員併發"})
+
+    with ThreadPoolExecutor(max_workers=20) as executor:
+        raw_results = [future.result() for future in as_completed([executor.submit(race_spin) for _ in range(20)])]
+
+    ok_draws = []
+    rejected = []
+    errors = []
+    for data, status_code in raw_results:
+        if status_code != 200:
+            errors.append({"status": status_code, "data": data})
+            continue
+        if data.get("ok"):
+            ok_draws.append(data["prize"])
+        else:
+            rejected.append(data.get("message"))
+
+    _, status_data = lottery_status(client, line_user_id)
+    return {
+        "successCount": len(ok_draws),
+        "rejectedCount": len(rejected),
+        "errors": errors[:5],
+        "remainingSpins": status_data.get("remaining") if status_data else None,
+        "used": status_data.get("used") if status_data else None,
+        "serials": [prize.get("serialCode") for prize in ok_draws if prize.get("serialCode")],
+    }
+
+
 def http_json(url, timeout=30):
     request = Request(url, headers={"User-Agent": "line-lottery-ops-audit/1.0"})
     try:
@@ -442,6 +479,8 @@ def evaluate_risks(report):
 
     if report["concurrencyRace"]["duplicateSerials"] != 0:
         risks.append({"level": "P0", "message": "Concurrent serial reservation produced duplicate serials."})
+    if report["sameMemberRace"]["successCount"] != 1 or report["sameMemberRace"]["used"] != 1:
+        risks.append({"level": "P0", "message": "Same member concurrent draw consumed more than one spin."})
 
     risks.append(
         {
@@ -476,6 +515,7 @@ def main():
             run_draws(client, "EXHAUST_30", max(800, min(args.draws, 2000)), big_weight=0.0, mystery_serials=5, coupon30_serials=10),
         ],
         "concurrencyRace": run_concurrency_race(client),
+        "sameMemberRace": run_same_member_race(client),
     }
     if args.live_url:
         report["liveReadonly"] = run_live_readonly(args.live_url)

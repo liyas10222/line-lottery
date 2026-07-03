@@ -217,6 +217,14 @@ def get_member_quota(db, line_user_id):
     }
 
 
+def acquire_member_spin_lock(db, line_user_id):
+    if db.is_postgres:
+        db.execute(
+            "SELECT pg_advisory_xact_lock(hashtext('line_lottery_member_spin'), hashtext(?))",
+            (line_user_id,),
+        )
+
+
 def get_lottery_status(line_user_id):
     line_user_id = validate_line_user_id(line_user_id)
     if not line_user_id:
@@ -576,6 +584,7 @@ def spin_lottery(payload):
     fallback_warnings = []
     try:
         db.begin_immediate()
+        acquire_member_spin_lock(db, line_user_id)
 
         timestamp = now_iso()
         member = db.execute(
@@ -1245,6 +1254,7 @@ def set_member_spin_limit(line_user_id, payload):
     timestamp = now_iso()
 
     with get_db() as db:
+        acquire_member_spin_lock(db, line_user_id)
         used_row = db.execute(
             """
             SELECT COUNT(*) AS count
