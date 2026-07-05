@@ -1206,6 +1206,7 @@ def delete_admin_line_user(line_user_id):
 def update_prize(prize_id, payload):
     fields = []
     values = []
+    updated_prize = None
 
     if "name" in payload:
         name = clean_text(payload["name"], 120)
@@ -1245,7 +1246,45 @@ def update_prize(prize_id, payload):
         if cursor.rowcount == 0:
             return {"ok": False, "message": "找不到獎項"}, 404
 
-    return {"ok": True}, 200
+    with get_db() as db:
+        updated_prize = db.execute(
+            """
+            SELECT id, name, code, short_label, weight, stock, requires_serial, is_active
+            FROM prizes
+            WHERE id = ?
+            """,
+            (prize_id,),
+        ).fetchone()
+
+    sheet_writeback = {"ok": True, "skipped": True, "message": "Google Sheet sync is disabled"}
+    if Config.SHEET_SYNC_ENABLED and Config.GOOGLE_SHEET_ID and updated_prize:
+        try:
+            from services.google_sheet_service import update_prize_rows_in_google_sheet
+
+            sheet_writeback, sheet_status = update_prize_rows_in_google_sheet(
+                {
+                    "prizeCode": updated_prize["code"],
+                    "prizeName": updated_prize["name"],
+                    "shortLabel": updated_prize["short_label"] or updated_prize["name"],
+                    "weight": updated_prize["weight"],
+                    "stock": updated_prize["stock"],
+                    "requiresSerial": bool(updated_prize["requires_serial"]),
+                    "isActive": bool(updated_prize["is_active"]),
+                }
+            )
+            sheet_writeback = {"statusCode": sheet_status, **sheet_writeback}
+        except Exception as error:
+            LOGGER.exception("Google Sheet prize settings writeback failed after prize update")
+            sheet_writeback = {"ok": False, "message": str(error)}
+        if not sheet_writeback.get("ok"):
+            write_operation_log(
+                "google_sheet_prize_update",
+                level="error",
+                message="Prize settings committed but Google Sheet update failed",
+                payload={"prizeId": prize_id, "result": sheet_writeback},
+            )
+
+    return {"ok": True, "sheetWriteback": sheet_writeback}, 200
 
 
 def set_global_daily_limit(payload):

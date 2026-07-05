@@ -643,6 +643,96 @@ def upsert_prize_rows_to_google_sheet(rows):
     return result, 200
 
 
+def update_prize_rows_in_google_sheet(prize):
+    code = clean_text(prize.get("prizeCode") or prize.get("code"), 80)
+    if not code:
+        return {"ok": False, "message": "Missing prize code"}, 400
+
+    setup_result, setup_status = ensure_control_sheet()
+    if setup_status != 200 or not setup_result.get("ok"):
+        return setup_result, setup_status
+
+    session, error = get_authorized_session(scopes=[SHEETS_SCOPE])
+    if error:
+        return {"ok": False, "message": error}, 500
+
+    sheet_title, error = get_sheet_title(session)
+    if error:
+        return {"ok": False, "message": error}, 502
+
+    escaped_title = sheet_title.replace("'", "''")
+    read_range = f"'{escaped_title}'!A:P"
+    range_name = urllib.parse.quote(read_range, safe="")
+    url = (
+        f"https://sheets.googleapis.com/v4/spreadsheets/{Config.GOOGLE_SHEET_ID}"
+        f"/values/{range_name}?majorDimension=ROWS"
+    )
+    data, error = request_google_json(session, url)
+    if error:
+        return {"ok": False, "message": error}, 502
+
+    sheet_row = prize_sheet_row(prize)
+    updates = []
+    matched_rows = []
+    values = data.get("values", [])
+    for row_number, existing_row in enumerate(values[1:], start=2):
+        row_code = clean_text(existing_row[0] if len(existing_row) > 0 else "", 80)
+        if row_code != code:
+            continue
+        matched_rows.append(row_number)
+        updates.append(
+            {
+                "range": f"'{escaped_title}'!A{row_number}:G{row_number}",
+                "majorDimension": "ROWS",
+                "values": [sheet_row[:7]],
+            }
+        )
+
+    total_updated_rows = 0
+    total_updated_cells = 0
+    if updates:
+        batch_url = f"https://sheets.googleapis.com/v4/spreadsheets/{Config.GOOGLE_SHEET_ID}/values:batchUpdate"
+        for start in range(0, len(updates), 500):
+            payload = {"valueInputOption": "RAW", "data": updates[start : start + 500]}
+            result, error = send_google_json(session, "POST", batch_url, payload)
+            if error:
+                return {"ok": False, "message": error}, 502
+            total_updated_rows += result.get("totalUpdatedRows", 0)
+            total_updated_cells += result.get("totalUpdatedCells", 0)
+
+    appended_rows = 0
+    appended_cells = 0
+    if not matched_rows:
+        append_range = urllib.parse.quote(f"'{escaped_title}'!A:P", safe="")
+        append_url = (
+            f"https://sheets.googleapis.com/v4/spreadsheets/{Config.GOOGLE_SHEET_ID}"
+            f"/values/{append_range}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS"
+        )
+        result, error = send_google_json(
+            session,
+            "POST",
+            append_url,
+            {"majorDimension": "ROWS", "values": [sheet_row]},
+        )
+        if error:
+            return {"ok": False, "message": error}, 502
+        updates_result = result.get("updates", {})
+        appended_rows = updates_result.get("updatedRows", 0)
+        appended_cells = updates_result.get("updatedCells", 0)
+
+    result = {
+        "ok": True,
+        "sheetName": sheet_title,
+        "matchedRows": matched_rows,
+        "updatedRows": total_updated_rows,
+        "updatedCells": total_updated_cells,
+        "appendedRows": appended_rows,
+        "appendedCells": appended_cells,
+    }
+    write_operation_log("google_sheet_prize_update", message="Prize settings updated in Google Sheet", payload=result)
+    return result, 200
+
+
 def rows_from_values(values):
     if not values:
         return []

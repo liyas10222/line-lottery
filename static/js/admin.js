@@ -819,6 +819,11 @@ async function savePrize(row, prizeId) {
     setOutput("sheetOutput", data);
     setAdminMessage("獎項已儲存。");
     await loadPrizes();
+    if (data.sheetWriteback?.ok) {
+      setAdminMessage(data.sheetWriteback.skipped ? "獎項已儲存。" : "獎項已儲存，Google Sheet 已同步。");
+    } else {
+      setAdminMessage("獎項已儲存到資料庫，但 Google Sheet 同步失敗；下次同步可能會被試算表覆蓋。", true);
+    }
   } catch (error) {
     showError(error);
   }
