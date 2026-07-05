@@ -105,6 +105,7 @@ function bindLotteryButtons() {
   document.getElementById("logoutButton").addEventListener("click", logoutLine);
   document.getElementById("spinButton").addEventListener("click", spinLottery);
   document.getElementById("bulkDrawButton").addEventListener("click", bulkDrawLottery);
+  document.getElementById("drawAllButton").addEventListener("click", drawAllLottery);
   document.getElementById("result").addEventListener("click", handleResultClick);
   document.getElementById("historyButton").addEventListener("click", () => {
     window.location.href = "/history";
@@ -371,21 +372,26 @@ async function refreshStatus() {
 function updateSpinButtons() {
   const spinButton = document.getElementById("spinButton");
   const bulkButton = document.getElementById("bulkDrawButton");
+  const drawAllButton = document.getElementById("drawAllButton");
   const loggedIn = Boolean(state.profile);
   const canSingle = loggedIn && state.remaining >= 1 && !state.spinning;
   const canBulk = loggedIn && state.remaining >= 10 && !state.spinning;
+  const canDrawAll = loggedIn && state.remaining >= 1 && !state.spinning;
 
   spinButton.disabled = !canSingle;
   bulkButton.disabled = !canBulk;
+  drawAllButton.disabled = !canDrawAll;
 
   if (!loggedIn) {
     spinButton.textContent = "請先登入";
     bulkButton.textContent = "10 抽";
+    drawAllButton.textContent = "全部抽取";
     return;
   }
 
   spinButton.textContent = state.spinning ? "抽獎中..." : state.remaining >= 1 ? "開始抽獎" : "次數不足";
   bulkButton.textContent = state.remaining >= 10 ? "10 抽" : "抽獎次數不足 10 次";
+  drawAllButton.textContent = state.remaining >= 1 ? "全部抽取" : "次數不足";
 }
 
 function shouldSkipAnimation() {
@@ -441,17 +447,7 @@ async function bulkDrawLottery() {
   setMessage("正在執行 10 抽...");
 
   try {
-    const response = await fetch("/api/lottery/draw-bulk", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        lineUserId: state.profile.lineUserId,
-        displayName: state.profile.displayName,
-        count: 10,
-        skipAnimation: shouldSkipAnimation(),
-      }),
-    });
-    const data = await response.json();
+    const data = await requestBulkDraw(10);
 
     if (!data.ok && !Array.isArray(data.results)) {
       setMessage(data.message || "10 抽失敗", true);
@@ -467,6 +463,88 @@ async function bulkDrawLottery() {
   } catch (error) {
     console.error(error);
     setMessage("10 抽失敗，請稍後再試。", true);
+  } finally {
+    state.spinning = false;
+    updateSpinButtons();
+  }
+}
+
+async function requestBulkDraw(count) {
+  const response = await fetch("/api/lottery/draw-bulk", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      lineUserId: state.profile.lineUserId,
+      displayName: state.profile.displayName,
+      count,
+      skipAnimation: shouldSkipAnimation(),
+    }),
+  });
+  return response.json();
+}
+
+async function drawAllLottery() {
+  if (!state.profile || state.remaining < 1 || state.spinning) {
+    setMessage("目前沒有可用抽獎次數。", true);
+    return;
+  }
+
+  const totalToDraw = state.remaining;
+  if (!window.confirm(`確定要一次抽完目前剩餘的 ${totalToDraw} 次嗎？`)) {
+    return;
+  }
+
+  state.spinning = true;
+  updateSpinButtons();
+  setMessage(`正在執行全部抽取，共 ${totalToDraw} 次...`);
+
+  const combined = {
+    ok: true,
+    results: [],
+    successCount: 0,
+    failureCount: 0,
+    remainingSpins: state.remaining,
+  };
+
+  try {
+    let remainingToDraw = totalToDraw;
+    while (remainingToDraw > 0) {
+      const batchCount = Math.min(10, remainingToDraw);
+      const data = await requestBulkDraw(batchCount);
+
+      if (!data.ok && !Array.isArray(data.results)) {
+        combined.ok = false;
+        combined.message = data.message || "全部抽取中斷";
+        break;
+      }
+
+      combined.results.push(...(data.results || []));
+      combined.successCount += Number(data.successCount || 0);
+      combined.failureCount += Number(data.failureCount || 0);
+      combined.remainingSpins = Number(data.remainingSpins ?? combined.remainingSpins);
+
+      if (!data.ok || Number(data.successCount || 0) < batchCount) {
+        combined.ok = false;
+        combined.message = data.message || "全部抽取部分失敗";
+        break;
+      }
+
+      remainingToDraw -= batchCount;
+      setMessage(`全部抽取進行中：已完成 ${combined.successCount} / ${totalToDraw} 次...`);
+    }
+
+    if (!shouldSkipAnimation() && combined.results.length > 0) {
+      await animateWheel(combined.results[0].prizeCode, { durationMs: 1600, spins: 3 });
+    }
+    renderBulkResults(combined, {
+      title: "本次全部抽取結果",
+      completeMessage: `全部抽取完成，共完成 ${combined.successCount} 次，剩餘 ${combined.remainingSpins} 次。`,
+      partialMessage: combined.message || "全部抽取部分失敗，請查看結果列表。",
+    });
+    await refreshStatus();
+  } catch (error) {
+    console.error(error);
+    setMessage("全部抽取失敗，請稍後再試。", true);
   } finally {
     state.spinning = false;
     updateSpinButtons();
@@ -626,8 +704,12 @@ function renderSingleDrawResult(prize) {
   setMessage(isThanks ? "這次沒有中獎，明天再來試試。" : "恭喜中獎，請保存中獎序號。");
 }
 
-function renderBulkResults(data) {
+function renderBulkResults(data, options = {}) {
   const result = document.getElementById("result");
+  const title = options.title || "本次 10 抽結果";
+  const successText = `${data.successCount || data.results.length} 筆完成`;
+  const completeMessage = options.completeMessage || `10 抽完成，剩餘 ${data.remainingSpins} 次。`;
+  const partialMessage = options.partialMessage || "10 抽部分失敗，請查看結果列表。";
   const rows = data.results.map((item) => {
     const isThanks = isThanksPrizeCode(item.prizeCode) || item.status === "not_won";
     const copyButton = item.serialCode
@@ -648,12 +730,12 @@ function renderBulkResults(data) {
   result.className = "result-box draw-result-panel";
   result.innerHTML = `
     <div class="draw-result-header">
-      <span>本次 10 抽結果</span>
-      <strong>${data.successCount || data.results.length} 筆完成</strong>
+      <span>${escapeHtml(title)}</span>
+      <strong>${escapeHtml(successText)}</strong>
     </div>
     <ol class="draw-result-list">${rows}</ol>
   `;
-  setMessage(data.ok ? `10 抽完成，剩餘 ${data.remainingSpins} 次。` : "10 抽部分失敗，請查看結果列表。", !data.ok);
+  setMessage(data.ok ? completeMessage : partialMessage, !data.ok);
 }
 
 function handleResultClick(event) {
