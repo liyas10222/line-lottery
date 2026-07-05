@@ -8,6 +8,7 @@ from services.lottery_service import (
     clean_text,
     get_db,
     now_iso,
+    validate_prize_weight_configs,
 )
 from services.operation_log_service import write_operation_log
 from services.google_sheet_service import upsert_prize_rows_to_google_sheet
@@ -208,10 +209,37 @@ def build_import_summary(rows, errors, prizes, serials):
     }
 
 
+def validate_import_weight_total(prizes):
+    configs_by_code = {}
+    with get_db() as db:
+        for row in db.execute("SELECT code, weight, is_active FROM prizes").fetchall():
+            configs_by_code[row["code"]] = {
+                "code": row["code"],
+                "weight": row["weight"],
+                "isActive": bool(row["is_active"]),
+            }
+
+    for prize in prizes.values():
+        configs_by_code[prize["code"]] = {
+            "code": prize["code"],
+            "weight": prize["weight"],
+            "isActive": prize["isActive"],
+        }
+
+    return validate_prize_weight_configs(configs_by_code.values())
+
+
 def preview_prize_import(csv_text):
     rows, parse_errors = parse_csv_rows(csv_text)
     prizes, serials, aggregate_errors = aggregate_rows(rows)
     errors = parse_errors + aggregate_errors
+    if not errors:
+        weight_total_ok, configured_total_weight = validate_import_weight_total(prizes)
+        if not weight_total_ok:
+            errors.append({
+                "row": 1,
+                "message": f"啟用獎項權重總和不可超過 100，目前會變成 {configured_total_weight}",
+            })
     summary = build_import_summary(rows, errors, prizes, serials)
     return {"ok": len(errors) == 0, "summary": summary}, 200 if len(errors) == 0 else 400
 
@@ -220,6 +248,13 @@ def import_prize_csv(csv_text):
     rows, parse_errors = parse_csv_rows(csv_text)
     prizes, serials, aggregate_errors = aggregate_rows(rows)
     errors = parse_errors + aggregate_errors
+    if not errors:
+        weight_total_ok, configured_total_weight = validate_import_weight_total(prizes)
+        if not weight_total_ok:
+            errors.append({
+                "row": 1,
+                "message": f"啟用獎項權重總和不可超過 100，目前會變成 {configured_total_weight}",
+            })
     if errors:
         summary = build_import_summary(rows, errors, prizes, serials)
         result = {"ok": False, "message": "CSV 驗證失敗", "summary": summary}

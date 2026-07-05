@@ -726,6 +726,9 @@ function renderPrizeRow(prize) {
   const transferText = isThanksPrize && prize.transferredWeightToNone > 0
     ? `<span>承接抽光權重 ${formatNumber(prize.transferredWeightToNone)}</span>`
     : "";
+  const unallocatedText = isThanksPrize && prize.unallocatedWeightToNone > 0
+    ? `<span>承接未分配權重 ${formatNumber(prize.unallocatedWeightToNone)}</span>`
+    : "";
 
   return `
     <div class="admin-row admin-prize-row" data-prize-id="${prize.id}">
@@ -744,6 +747,7 @@ function renderPrizeRow(prize) {
         <span>權重 <strong>${formatNumber(prize.weight)}</strong></span>
         <span>目前機率 <strong>${formatNumber(prize.probabilityPercent)}%</strong></span>
         ${transferText}
+        ${unallocatedText}
       </div>
       <div class="admin-prize-controls">
         <label>

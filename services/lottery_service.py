@@ -17,6 +17,7 @@ REDEEM_NOTICE = "請截圖保存中獎序號，並將中獎序號提供給官方
 MYSTERY_GIFT_CODE = "MYSTERY_GIFT"
 COUPON30_CODE = "COUPON30"
 LOCKED_GRAND_PRIZE_CODES = {"AIRPODS_PRO3", "SWITCH2_MARIOKART", "IPHONE16", "IPHONE17", "IPHONE17_256"}
+BASE_PROBABILITY_WEIGHT = 100
 
 
 def now_local():
@@ -304,6 +305,10 @@ def is_prize_active_weighted(prize):
     )
 
 
+def is_prize_configured_weighted(code, weight, is_active):
+    return bool(is_active) and weight and weight > 0 and clean_text(code, 80).upper() not in LOCKED_GRAND_PRIZE_CODES
+
+
 def is_thanks_prize(prize):
     code = clean_text(prize["code"], 80).upper()
     name = clean_text(prize["name"], 120)
@@ -350,7 +355,7 @@ def exhausted_weight_target(prize, prizes, none_prize):
 
 def effective_prize_weight_summary(prizes):
     active_weighted_prizes = [prize for prize in prizes if is_prize_active_weighted(prize)]
-    total_weight = sum(prize["weight"] for prize in active_weighted_prizes)
+    configured_total_weight = sum(prize["weight"] for prize in active_weighted_prizes)
     none_prize = get_none_prize(prizes)
     effective_weights = {}
     transferred_weights = {}
@@ -369,12 +374,54 @@ def effective_prize_weight_summary(prizes):
         effective_weights[target_id] = effective_weights.get(target_id, 0) + prize["weight"]
         transferred_weights[target_id] = transferred_weights.get(target_id, 0) + prize["weight"]
 
+    unallocated_weight_to_none = 0
+    if (
+        configured_total_weight < BASE_PROBABILITY_WEIGHT
+        and none_prize is not None
+        and is_prize_awardable(none_prize)
+    ):
+        unallocated_weight_to_none = BASE_PROBABILITY_WEIGHT - configured_total_weight
+        none_prize_id = none_prize["id"]
+        effective_weights[none_prize_id] = effective_weights.get(none_prize_id, 0) + unallocated_weight_to_none
+
     return {
-        "totalWeight": total_weight,
+        "totalWeight": max(configured_total_weight, BASE_PROBABILITY_WEIGHT)
+        if unallocated_weight_to_none
+        else configured_total_weight,
+        "configuredTotalWeight": configured_total_weight,
         "effectiveWeights": effective_weights,
         "transferredWeights": transferred_weights,
         "transferredToNone": transferred_weights.get(none_prize["id"], 0) if none_prize else 0,
+        "unallocatedWeightToNone": unallocated_weight_to_none,
     }
+
+
+def validate_configured_prize_weight_total(prize_id, proposed_weight=None, proposed_is_active=None, proposed_code=None):
+    with get_db() as db:
+        rows = db.execute("SELECT id, code, weight, is_active FROM prizes").fetchall()
+
+    total = 0
+    for row in rows:
+        code = proposed_code if row["id"] == prize_id and proposed_code is not None else row["code"]
+        weight = proposed_weight if row["id"] == prize_id and proposed_weight is not None else row["weight"]
+        is_active = proposed_is_active if row["id"] == prize_id and proposed_is_active is not None else row["is_active"]
+        if is_prize_configured_weighted(code, weight, is_active):
+            total += weight
+
+    if total > BASE_PROBABILITY_WEIGHT:
+        return False, total
+    return True, total
+
+
+def validate_prize_weight_configs(configs):
+    total = 0
+    for config in configs:
+        if is_prize_configured_weighted(config.get("code"), config.get("weight"), config.get("isActive")):
+            total += config.get("weight") or 0
+
+    if total > BASE_PROBABILITY_WEIGHT:
+        return False, total
+    return True, total
 
 
 def effective_spin_prize_pool(prizes):
@@ -410,9 +457,11 @@ def prize_quantity_summary(prize):
 def serialize_prizes(prizes, include_inactive=True):
     weight_summary = effective_prize_weight_summary(prizes)
     total_weight = weight_summary["totalWeight"]
+    configured_total_weight = weight_summary["configuredTotalWeight"]
     effective_weights = weight_summary["effectiveWeights"]
     transferred_weights = weight_summary["transferredWeights"]
     transferred_to_none = weight_summary["transferredToNone"]
+    unallocated_weight_to_none = weight_summary["unallocatedWeightToNone"]
     output = []
 
     for prize in prizes:
@@ -447,9 +496,12 @@ def serialize_prizes(prizes, include_inactive=True):
                 "isAwardable": awardable,
                 "transferredWeightIn": transferred_weights.get(prize["id"], 0),
                 "transferredWeightToNone": transferred_to_none if is_thanks_prize(prize) else 0,
+                "unallocatedWeightToNone": unallocated_weight_to_none if is_thanks_prize(prize) else 0,
                 "probabilityWeight": probability_weight,
                 "probability": round(probability, 6),
                 "probabilityPercent": round(probability * 100, 2),
+                "configuredTotalWeight": configured_total_weight,
+                "totalProbabilityWeight": total_weight,
             }
         )
     return output
@@ -1207,6 +1259,9 @@ def update_prize(prize_id, payload):
     fields = []
     values = []
     updated_prize = None
+    proposed_code = clean_text(payload["code"], 80) if "code" in payload else None
+    proposed_weight = as_optional_number(payload["weight"], minimum=0) if "weight" in payload else None
+    proposed_is_active = as_bool(payload["isActive"]) if "isActive" in payload else None
 
     if "name" in payload:
         name = clean_text(payload["name"], 120)
@@ -1216,13 +1271,13 @@ def update_prize(prize_id, payload):
         values.append(name)
     if "code" in payload:
         fields.append("code = ?")
-        values.append(clean_text(payload["code"], 80))
+        values.append(proposed_code)
     if "shortLabel" in payload:
         fields.append("short_label = ?")
         values.append(clean_text(payload["shortLabel"], 24))
     if "weight" in payload:
         fields.append("weight = ?")
-        values.append(as_optional_number(payload["weight"], minimum=0))
+        values.append(proposed_weight)
     if "stock" in payload:
         fields.append("stock = ?")
         values.append(as_optional_int(payload["stock"], minimum=0))
@@ -1231,10 +1286,24 @@ def update_prize(prize_id, payload):
         values.append(as_bool(payload["requiresSerial"]))
     if "isActive" in payload:
         fields.append("is_active = ?")
-        values.append(as_bool(payload["isActive"]))
+        values.append(proposed_is_active)
 
     if not fields:
         return {"ok": False, "message": "沒有可更新欄位"}, 400
+
+    if any(key in payload for key in ("code", "weight", "isActive")):
+        weight_total_ok, configured_total_weight = validate_configured_prize_weight_total(
+            prize_id,
+            proposed_weight=proposed_weight,
+            proposed_is_active=proposed_is_active,
+            proposed_code=proposed_code,
+        )
+        if not weight_total_ok:
+            return {
+                "ok": False,
+                "message": f"啟用獎項權重總和不可超過 100，目前會變成 {configured_total_weight}",
+                "configuredTotalWeight": configured_total_weight,
+            }, 400
 
     fields.append("updated_at = ?")
     values.append(now_iso())

@@ -14,7 +14,7 @@ from google.oauth2 import service_account
 
 from config import Config
 from services.database import reset_sequences
-from services.lottery_service import clean_text, get_db, now_iso, now_local
+from services.lottery_service import clean_text, get_db, now_iso, now_local, validate_prize_weight_configs
 from services.operation_log_service import write_operation_log
 
 
@@ -795,6 +795,38 @@ def parse_serial_status(value):
     return "available"
 
 
+def validate_sheet_weight_total(rows, rebuild=False):
+    configs_by_code = {}
+    if not rebuild:
+        with get_db() as db:
+            for row in db.execute("SELECT code, weight, is_active FROM prizes").fetchall():
+                configs_by_code[row["code"]] = {
+                    "code": row["code"],
+                    "weight": row["weight"],
+                    "isActive": bool(row["is_active"]),
+                }
+
+    for raw_row in rows:
+        row = normalize_row(raw_row)
+        if not any(str(value).strip() for value in row.values()):
+            continue
+
+        code = clean_text(get_cell(row, "code"), 80)
+        if not code:
+            continue
+
+        existing = configs_by_code.get(code, {"code": code, "weight": 0, "isActive": True})
+        raw_weight = get_cell(row, "weight")
+        raw_is_active = get_cell(row, "is_active")
+        configs_by_code[code] = {
+            "code": code,
+            "weight": parse_number(raw_weight, default=existing["weight"]),
+            "isActive": parse_bool(raw_is_active, default=bool(existing["isActive"])),
+        }
+
+    return validate_prize_weight_configs(configs_by_code.values())
+
+
 def sync_prize_rows(rows, source_sheet="google_sheet", rebuild=False):
     timestamp = now_iso()
     stats = {
@@ -815,6 +847,13 @@ def sync_prize_rows(rows, source_sheet="google_sheet", rebuild=False):
     }
     seen_codes = set()
     seen_serial_codes = set()
+    weight_total_ok, configured_total_weight = validate_sheet_weight_total(rows, rebuild=rebuild)
+    if not weight_total_ok:
+        stats["errors"].append({
+            "row": 1,
+            "message": f"啟用獎項權重總和不可超過 100，目前會變成 {configured_total_weight}",
+        })
+        return {"ok": False, "message": "Google Sheet 權重設定超過 100", **stats}, 400
 
     with get_db() as db:
         if rebuild:

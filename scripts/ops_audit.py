@@ -259,9 +259,9 @@ def run_role_play(client):
 
     csv_good = (
         "\ufeffprize_code,prize_name,short_label,weight,stock,requires_serial,is_active,serial_code\n"
-        "AUDIT100,測試100券,100券,1.5,2,true,true,AUDIT100-0001\n"
-        "AUDIT100,測試100券,100券,1.5,2,true,true,AUDIT100-0002\n"
-        "AUDIT_THANKS,測試銘謝,銘謝,1,999,false,true,\n"
+        "AUDIT100,測試100券,100券,0,2,true,true,AUDIT100-0001\n"
+        "AUDIT100,測試100券,100券,0,2,true,true,AUDIT100-0002\n"
+        "AUDIT_THANKS,測試銘謝,銘謝,0,999,false,true,\n"
     )
     checks.append(("csv_import_valid", *admin_post(client, "/api/admin/prizes/import", {"confirm": "IMPORT_PRIZE_CSV", "csvText": csv_good})))
     checks.append(("csv_import_duplicate_rerun", *admin_post(client, "/api/admin/prizes/import", {"confirm": "IMPORT_PRIZE_CSV", "csvText": csv_good})))
