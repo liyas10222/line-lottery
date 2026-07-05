@@ -1475,6 +1475,7 @@ def add_prize_serials(prize_id, payload):
     created = []
     skipped = []
     sheet_rows = []
+    input_serial_codes = []
     with get_db() as db:
         prize = db.execute(
             """
@@ -1492,6 +1493,7 @@ def add_prize_serials(prize_id, payload):
             if not serial_code:
                 skipped.append({"serialCode": serial_code, "reason": "empty"})
                 continue
+            input_serial_codes.append(serial_code)
 
             cursor = db.execute(
                 """
@@ -1512,6 +1514,24 @@ def add_prize_serials(prize_id, payload):
             )
             if cursor.rowcount:
                 created.append(serial_code)
+            else:
+                skipped.append({"serialCode": serial_code, "reason": "duplicate"})
+
+        unique_input_serials = list(dict.fromkeys(input_serial_codes))
+        if unique_input_serials:
+            placeholders = ",".join("?" for _ in unique_input_serials)
+            serial_rows = db.execute(
+                f"""
+                SELECT serial_code, source_order_no, note
+                FROM prize_serials
+                WHERE prize_id = ?
+                  AND status = 'available'
+                  AND serial_code IN ({placeholders})
+                ORDER BY id ASC
+                """,
+                [prize_id, *unique_input_serials],
+            ).fetchall()
+            for serial in serial_rows:
                 sheet_rows.append(
                     {
                         "prizeCode": prize["code"],
@@ -1521,13 +1541,11 @@ def add_prize_serials(prize_id, payload):
                         "stock": prize["stock"],
                         "requiresSerial": bool(prize["requires_serial"]),
                         "isActive": bool(prize["is_active"]),
-                        "serialCode": serial_code,
-                        "sourceOrderNo": clean_text(item.get("sourceOrderNo") or payload.get("sourceOrderNo"), 80),
-                        "note": clean_text(item.get("note") or payload.get("note"), 500),
+                        "serialCode": serial["serial_code"],
+                        "sourceOrderNo": clean_text(serial["source_order_no"], 80),
+                        "note": clean_text(serial["note"], 500),
                     }
                 )
-            else:
-                skipped.append({"serialCode": serial_code, "reason": "duplicate"})
 
         db.commit()
 
@@ -1559,7 +1577,12 @@ def add_prize_serials(prize_id, payload):
                     "google_sheet_prize_upsert",
                     level="error",
                     message="Prize serials committed but Google Sheet upsert failed",
-                    payload={"statusCode": sheet_status, "result": sheet_writeback, "created": created},
+                    payload={
+                        "statusCode": sheet_status,
+                        "result": sheet_writeback,
+                        "created": created,
+                        "sheetRows": len(sheet_rows),
+                    },
                 )
             sheet_writeback = {"statusCode": sheet_status, **sheet_writeback}
         except Exception as error:
@@ -1569,10 +1592,16 @@ def add_prize_serials(prize_id, payload):
                 "google_sheet_prize_upsert",
                 level="error",
                 message="Prize serials committed but Google Sheet upsert crashed",
-                payload={"error": str(error), "created": created},
+                payload={"error": str(error), "created": created, "sheetRows": len(sheet_rows)},
             )
 
-    return {"ok": True, "created": created, "skipped": skipped, "sheetWriteback": sheet_writeback}, 200
+    return {
+        "ok": True,
+        "created": created,
+        "skipped": skipped,
+        "sheetRows": len(sheet_rows),
+        "sheetWriteback": sheet_writeback,
+    }, 200
 
 
 def list_prize_serials(filters):

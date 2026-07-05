@@ -848,7 +848,25 @@ async function addPrizeSerials(row, prizeId) {
     });
     textarea.value = "";
     setOutput("sheetOutput", data);
-    setAdminMessage(`已新增 ${data.created.length} 組序號，略過 ${data.skipped.length} 組。`);
+    const createdCount = Array.isArray(data.created) ? data.created.length : 0;
+    const skippedCount = Array.isArray(data.skipped) ? data.skipped.length : 0;
+    const sheetWriteback = data.sheetWriteback || {};
+    const sheetRows = Number(data.sheetRows || 0);
+    let message = `已新增 ${createdCount} 組序號，略過 ${skippedCount} 組。`;
+    let isError = false;
+    if (sheetWriteback.ok) {
+      if (sheetWriteback.skipped || sheetRows === 0) {
+        message += " Google Sheet 無需更新。";
+      } else {
+        const appendedRows = Number(sheetWriteback.appendedRows || 0);
+        const updatedRows = Number(sheetWriteback.updatedRows || 0);
+        message += ` Google Sheet 已同步 ${appendedRows} 列新增、${updatedRows} 列更新。`;
+      }
+    } else {
+      isError = true;
+      message += ` 但 Google Sheet 同步失敗：${sheetWriteback.message || "請查看操作紀錄"}`;
+    }
+    setAdminMessage(message, isError);
     await loadPrizes();
   } catch (error) {
     showError(error);
