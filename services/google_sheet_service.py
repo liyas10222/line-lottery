@@ -520,6 +520,29 @@ def parse_start_row_from_range(range_text):
     return int(match.group(1)) if match else None
 
 
+def find_next_prize_sheet_row(values):
+    """
+    找出 Google Sheet 真正最後一筆獎項/序號資料的下一列。
+
+    不使用 Google Sheet append API，避免因為表格預設空白列、
+    checkbox、格式或資料驗證，導致新增資料跳到第 1000 列之後。
+
+    判斷依據：
+    - A 欄：獎項代碼 code
+    - H 欄：序號 serial_code
+    """
+    last_data_row = 1
+
+    for row_number, sheet_row in enumerate(values[1:], start=2):
+        code = clean_text(sheet_row[0] if len(sheet_row) > 0 else "", 80)
+        serial_code = clean_text(sheet_row[7] if len(sheet_row) > 7 else "", 120)
+
+        if code or serial_code:
+            last_data_row = row_number
+
+    return max(2, last_data_row + 1)
+
+
 def upsert_prize_rows_to_google_sheet(rows):
     rows = [row for row in rows if clean_text(row.get("prizeCode") or row.get("code"), 80)]
     if not rows:
@@ -607,28 +630,36 @@ def upsert_prize_rows_to_google_sheet(rows):
     appended_rows = 0
     appended_cells = 0
     if append_values:
-        append_range = urllib.parse.quote(f"'{escaped_title}'!A:P", safe="")
-        append_url = (
-            f"https://sheets.googleapis.com/v4/spreadsheets/{Config.GOOGLE_SHEET_ID}"
-            f"/values/{append_range}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS"
-        )
-        result, error = send_google_json(
-            session,
-            "POST",
-            append_url,
-            {"majorDimension": "ROWS", "values": append_values},
-        )
-        if error:
-            return {"ok": False, "message": error}, 502
+        next_row = find_next_prize_sheet_row(values)
+        append_updates = []
 
-        updates_result = result.get("updates", {})
-        appended_rows = updates_result.get("updatedRows", 0)
-        appended_cells = updates_result.get("updatedCells", 0)
-        start_row = parse_start_row_from_range(updates_result.get("updatedRange"))
-        if start_row:
-            for offset, serial_code in enumerate(append_serials):
-                if serial_code:
-                    row_numbers_by_serial[serial_code] = start_row + offset
+        for offset, sheet_row in enumerate(append_values):
+            target_row = next_row + offset
+            append_updates.append(
+                {
+                    "range": f"'{escaped_title}'!A{target_row}:P{target_row}",
+                    "majorDimension": "ROWS",
+                    "values": [sheet_row],
+                }
+            )
+
+            serial_code = append_serials[offset] if offset < len(append_serials) else ""
+            if serial_code:
+                row_numbers_by_serial[serial_code] = target_row
+
+        batch_url = f"https://sheets.googleapis.com/v4/spreadsheets/{Config.GOOGLE_SHEET_ID}/values:batchUpdate"
+        for start in range(0, len(append_updates), 500):
+            payload = {"valueInputOption": "RAW", "data": append_updates[start : start + 500]}
+            result, error = send_google_json(session, "POST", batch_url, payload)
+            if error:
+                return {"ok": False, "message": error}, 502
+            appended_rows += result.get("totalUpdatedRows", 0)
+            appended_cells += result.get("totalUpdatedCells", 0)
+
+        if appended_rows == 0:
+            appended_rows = len(append_values)
+        if appended_cells == 0:
+            appended_cells = len(append_values) * len(CHINESE_HEADERS)
 
     result = {
         "ok": True,
@@ -703,22 +734,23 @@ def update_prize_rows_in_google_sheet(prize):
     appended_rows = 0
     appended_cells = 0
     if not matched_rows:
-        append_range = urllib.parse.quote(f"'{escaped_title}'!A:P", safe="")
-        append_url = (
-            f"https://sheets.googleapis.com/v4/spreadsheets/{Config.GOOGLE_SHEET_ID}"
-            f"/values/{append_range}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS"
-        )
-        result, error = send_google_json(
-            session,
-            "POST",
-            append_url,
-            {"majorDimension": "ROWS", "values": [sheet_row]},
-        )
+        next_row = find_next_prize_sheet_row(values)
+        batch_url = f"https://sheets.googleapis.com/v4/spreadsheets/{Config.GOOGLE_SHEET_ID}/values:batchUpdate"
+        payload = {
+            "valueInputOption": "RAW",
+            "data": [
+                {
+                    "range": f"'{escaped_title}'!A{next_row}:P{next_row}",
+                    "majorDimension": "ROWS",
+                    "values": [sheet_row],
+                }
+            ],
+        }
+        result, error = send_google_json(session, "POST", batch_url, payload)
         if error:
             return {"ok": False, "message": error}, 502
-        updates_result = result.get("updates", {})
-        appended_rows = updates_result.get("updatedRows", 0)
-        appended_cells = updates_result.get("updatedCells", 0)
+        appended_rows = result.get("totalUpdatedRows", 0) or 1
+        appended_cells = result.get("totalUpdatedCells", 0) or len(CHINESE_HEADERS)
 
     result = {
         "ok": True,
