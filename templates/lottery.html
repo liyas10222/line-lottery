@@ -102,9 +102,12 @@
               </div>
             </article>
 
-            <article class="prize-showcase-card">
+            <article class="prize-showcase-card is-claimed">
               <span class="prize-rank">三獎</span>
-              <img src="{{ url_for('static', filename='images/prizes/airpods-pro3.png') }}" alt="AirPods Pro3">
+              <div class="prize-image-frame">
+                <img src="{{ url_for('static', filename='images/prizes/airpods-pro3.png') }}" alt="AirPods Pro3">
+                <span class="claimed-badge">已抽中</span>
+              </div>
               <div>
                 <h3>AirPods Pro3</h3>
                 <strong>*1</strong>
