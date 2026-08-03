@@ -621,8 +621,9 @@ h3 {
 }
 
 .prize-showcase-card.is-claimed {
-  border-color: rgba(255, 209, 102, .38);
-  background: rgba(255, 209, 102, .055);
+  border-color: rgba(255, 255, 255, .08);
+  background: rgba(255, 255, 255, .025);
+  opacity: .7;
 }
 
 .prize-showcase-card.is-claimed .prize-image-frame img {
@@ -634,9 +635,7 @@ h3 {
   content: "";
   position: absolute;
   inset: 0;
-  background:
-    linear-gradient(135deg, transparent 0 45%, rgba(255, 209, 102, .72) 46% 52%, transparent 53% 100%),
-    rgba(8, 13, 22, .2);
+  background: rgba(8, 13, 22, .2);
 }
 
 .claimed-badge {
@@ -648,7 +647,7 @@ h3 {
   padding: 5px 8px;
   border-radius: 999px;
   background: rgba(8, 13, 22, .86);
-  color: var(--gold);
+  color: rgba(255, 255, 255, .78);
   font-size: .78rem;
   font-weight: 900;
   line-height: 1;
