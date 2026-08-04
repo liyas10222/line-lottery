@@ -337,6 +337,19 @@ def get_sheet_title(session):
     return sheets[0].get("properties", {}).get("title"), None
 
 
+def sheet_id_from_title(session, sheet_title):
+    metadata, error = get_spreadsheet_metadata(session)
+    if error:
+        raise RuntimeError(error)
+
+    for sheet in metadata.get("sheets", []):
+        properties = sheet.get("properties", {})
+        if properties.get("title") == sheet_title:
+            return properties.get("sheetId")
+
+    raise RuntimeError(f"Google Sheet tab not found: {sheet_title}")
+
+
 def ensure_control_sheet():
     session, error = get_authorized_session(scopes=[SHEETS_SCOPE])
     if error:
@@ -583,8 +596,7 @@ def upsert_prize_rows_to_google_sheet(rows):
             existing_no_serial_by_code[code] = row_number
 
     updates = []
-    append_values = []
-    append_serials = []
+    append_items = []
     row_numbers_by_serial = {}
 
     for item in rows:
@@ -612,8 +624,13 @@ def upsert_prize_rows_to_google_sheet(rows):
                 row_numbers_by_serial[serial_code] = target_row
             continue
 
-        append_values.append(sheet_row)
-        append_serials.append(serial_code)
+        append_items.append(
+            {
+                "code": code,
+                "serialCode": serial_code,
+                "values": sheet_row,
+            }
+        )
 
     total_updated_rows = 0
     total_updated_cells = 0
@@ -629,37 +646,91 @@ def upsert_prize_rows_to_google_sheet(rows):
 
     appended_rows = 0
     appended_cells = 0
-    if append_values:
-        next_row = find_next_prize_sheet_row(values)
-        append_updates = []
+    if append_items:
+        last_data_row = find_next_prize_sheet_row(values) - 1
+        last_row_by_code = {}
+        for row_number, sheet_row in enumerate(values[1:], start=2):
+            code = clean_text(sheet_row[0] if len(sheet_row) > 0 else "", 80)
+            serial_code = clean_text(sheet_row[7] if len(sheet_row) > 7 else "", 120)
+            if code or serial_code:
+                last_row_by_code[code] = row_number
 
-        for offset, sheet_row in enumerate(append_values):
-            target_row = next_row + offset
-            append_updates.append(
+        grouped_items = {}
+        for item in append_items:
+            grouped_items.setdefault(item["code"], []).append(item)
+
+        insertion_groups = []
+        for code, items in grouped_items.items():
+            insertion_groups.append(
                 {
-                    "range": f"'{escaped_title}'!A{target_row}:P{target_row}",
+                    "code": code,
+                    "insertAfter": last_row_by_code.get(code, last_data_row),
+                    "items": items,
+                }
+            )
+        insertion_groups.sort(key=lambda item: item["insertAfter"])
+
+        shift = 0
+        value_updates = []
+        structure_url = f"https://sheets.googleapis.com/v4/spreadsheets/{Config.GOOGLE_SHEET_ID}:batchUpdate"
+        value_url = f"https://sheets.googleapis.com/v4/spreadsheets/{Config.GOOGLE_SHEET_ID}/values:batchUpdate"
+
+        for group in insertion_groups:
+            items = group["items"]
+            insert_after = group["insertAfter"] + shift
+            target_row = insert_after + 1
+            row_count = len(items)
+
+            if target_row <= last_data_row + shift:
+                payload = {
+                    "requests": [
+                        {
+                            "insertDimension": {
+                                "range": {
+                                    "sheetId": sheet_id_from_title(session, sheet_title),
+                                    "dimension": "ROWS",
+                                    "startIndex": target_row - 1,
+                                    "endIndex": target_row - 1 + row_count,
+                                },
+                                "inheritFromBefore": True,
+                            }
+                        }
+                    ]
+                }
+                _result, error = send_google_json(session, "POST", structure_url, payload)
+                if error:
+                    return {"ok": False, "message": error}, 502
+
+            values_to_write = [item["values"] for item in items]
+            value_updates.append(
+                {
+                    "range": f"'{escaped_title}'!A{target_row}:P{target_row + row_count - 1}",
                     "majorDimension": "ROWS",
-                    "values": [sheet_row],
+                    "values": values_to_write,
                 }
             )
 
-            serial_code = append_serials[offset] if offset < len(append_serials) else ""
-            if serial_code:
-                row_numbers_by_serial[serial_code] = target_row
+            for offset, item in enumerate(items):
+                serial_code = item["serialCode"]
+                if serial_code:
+                    row_numbers_by_serial[serial_code] = target_row + offset
 
-        batch_url = f"https://sheets.googleapis.com/v4/spreadsheets/{Config.GOOGLE_SHEET_ID}/values:batchUpdate"
-        for start in range(0, len(append_updates), 500):
-            payload = {"valueInputOption": "RAW", "data": append_updates[start : start + 500]}
-            result, error = send_google_json(session, "POST", batch_url, payload)
+            appended_rows += row_count
+            appended_cells += row_count * len(CHINESE_HEADERS)
+            shift += row_count
+
+        updated_append_rows = 0
+        updated_append_cells = 0
+        for start in range(0, len(value_updates), 500):
+            payload = {"valueInputOption": "RAW", "data": value_updates[start : start + 500]}
+            result, error = send_google_json(session, "POST", value_url, payload)
             if error:
                 return {"ok": False, "message": error}, 502
-            appended_rows += result.get("totalUpdatedRows", 0)
-            appended_cells += result.get("totalUpdatedCells", 0)
+            updated_append_rows += result.get("totalUpdatedRows", 0)
+            updated_append_cells += result.get("totalUpdatedCells", 0)
 
-        if appended_rows == 0:
-            appended_rows = len(append_values)
-        if appended_cells == 0:
-            appended_cells = len(append_values) * len(CHINESE_HEADERS)
+        appended_rows = updated_append_rows or appended_rows
+        appended_cells = updated_append_cells or appended_cells
 
     result = {
         "ok": True,
