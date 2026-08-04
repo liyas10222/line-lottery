@@ -18,6 +18,7 @@ const PRIZE_IMAGE_BY_CODE = {
   IPHONE16: "/static/images/prizes/iphone-17.png",
   IPHONE17_256: "/static/images/prizes/iphone-17.png",
 };
+const HIDDEN_WHEEL_PRIZE_CODES = new Set(["AIRPODS_PRO3"]);
 const WHEEL_LABEL_LINES = {
   NONE: ["銘謝惠顧"],
   THANKS: ["銘謝惠顧"],
@@ -35,7 +36,7 @@ const WHEEL_LABEL_LINES = {
 const REDEEM_NOTICE = "請截圖保存中獎序號，並將中獎序號提供給官方 LINE 兌換獎品喔！";
 const HISTORY_PAGE_SIZE = 10;
 
-let segments = [...DEFAULT_SEGMENTS];
+let segments = DEFAULT_SEGMENTS.filter(isWheelSegmentVisible);
 
 const state = {
   liffReady: false,
@@ -277,6 +278,7 @@ async function loadPrizeSegments() {
     if (data.ok && Array.isArray(data.prizes) && data.prizes.length >= 2) {
       segments = data.prizes
         .filter((prize) => prize.isActive)
+        .filter(isWheelSegmentVisible)
         .map((prize) => ({
           code: prize.code,
           name: prize.name,
@@ -623,6 +625,10 @@ function renderWheel() {
 
 function prizeImageUrl(code) {
   return PRIZE_IMAGE_BY_CODE[String(code || "").toUpperCase()] || "";
+}
+
+function isWheelSegmentVisible(prize) {
+  return !HIDDEN_WHEEL_PRIZE_CODES.has(String(prize?.code || "").toUpperCase());
 }
 
 function wheelLabelLines(segment) {
