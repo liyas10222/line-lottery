@@ -672,6 +672,8 @@ def upsert_prize_rows_to_google_sheet(rows):
 
         shift = 0
         value_updates = []
+        format_requests = []
+        sheet_id = sheet_id_from_title(session, sheet_title)
         structure_url = f"https://sheets.googleapis.com/v4/spreadsheets/{Config.GOOGLE_SHEET_ID}:batchUpdate"
         value_url = f"https://sheets.googleapis.com/v4/spreadsheets/{Config.GOOGLE_SHEET_ID}/values:batchUpdate"
 
@@ -687,7 +689,7 @@ def upsert_prize_rows_to_google_sheet(rows):
                         {
                             "insertDimension": {
                                 "range": {
-                                    "sheetId": sheet_id_from_title(session, sheet_title),
+                                    "sheetId": sheet_id,
                                     "dimension": "ROWS",
                                     "startIndex": target_row - 1,
                                     "endIndex": target_row - 1 + row_count,
@@ -707,6 +709,27 @@ def upsert_prize_rows_to_google_sheet(rows):
                     "range": f"'{escaped_title}'!A{target_row}:P{target_row + row_count - 1}",
                     "majorDimension": "ROWS",
                     "values": values_to_write,
+                }
+            )
+            format_requests.append(
+                {
+                    "repeatCell": {
+                        "range": {
+                            "sheetId": sheet_id,
+                            "startRowIndex": target_row - 1,
+                            "endRowIndex": target_row - 1 + row_count,
+                            "startColumnIndex": 0,
+                            "endColumnIndex": len(CHINESE_HEADERS),
+                        },
+                        "cell": {
+                            "userEnteredFormat": {
+                                "textFormat": {
+                                    "strikethrough": False,
+                                }
+                            }
+                        },
+                        "fields": "userEnteredFormat.textFormat.strikethrough",
+                    }
                 }
             )
 
@@ -731,6 +754,12 @@ def upsert_prize_rows_to_google_sheet(rows):
 
         appended_rows = updated_append_rows or appended_rows
         appended_cells = updated_append_cells or appended_cells
+
+        for start in range(0, len(format_requests), 500):
+            payload = {"requests": format_requests[start : start + 500]}
+            _result, error = send_google_json(session, "POST", structure_url, payload)
+            if error:
+                return {"ok": False, "message": error}, 502
 
     result = {
         "ok": True,
