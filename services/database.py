@@ -318,28 +318,7 @@ def create_sqlite_schema(db):
         """
     )
     db.execute(
-        """
-        CREATE TABLE IF NOT EXISTS order_claim_records (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            line_user_id TEXT NOT NULL,
-            line_display_name TEXT,
-            claim_type TEXT NOT NULL,
-            lookup_value TEXT,
-            amount TEXT,
-            payment_no TEXT,
-            points INTEGER NOT NULL,
-            source_sheet TEXT NOT NULL,
-            source_row INTEGER NOT NULL,
-            payment_method TEXT,
-            status TEXT NOT NULL DEFAULT 'claimed',
-            input_payload_json TEXT,
-            sheet_writeback_status TEXT,
-            sheet_writeback_message TEXT,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
-            UNIQUE(source_sheet, source_row)
-        )
-        """
+        sqlite_order_claim_records_schema()
     )
 
 
@@ -473,28 +452,7 @@ def create_postgres_schema(db):
         """
     )
     db.execute(
-        """
-        CREATE TABLE IF NOT EXISTS order_claim_records (
-            id SERIAL PRIMARY KEY,
-            line_user_id TEXT NOT NULL,
-            line_display_name TEXT,
-            claim_type TEXT NOT NULL,
-            lookup_value TEXT,
-            amount TEXT,
-            payment_no TEXT,
-            points INTEGER NOT NULL,
-            source_sheet TEXT NOT NULL,
-            source_row INTEGER NOT NULL,
-            payment_method TEXT,
-            status TEXT NOT NULL DEFAULT 'claimed',
-            input_payload_json TEXT,
-            sheet_writeback_status TEXT,
-            sheet_writeback_message TEXT,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
-            UNIQUE(source_sheet, source_row)
-        )
-        """
+        postgres_order_claim_records_schema()
     )
 
 
@@ -518,6 +476,140 @@ def ensure_common_columns(db):
     ensure_column(db, "lottery_records", "serial_code", "TEXT")
     ensure_column(db, "lottery_records", "line_display_name", "TEXT")
     ensure_column(db, "prize_serials", "assigned_display_name", "TEXT")
+    ensure_order_claim_source_key(db)
+
+
+def sqlite_order_claim_records_schema():
+    return """
+        CREATE TABLE IF NOT EXISTS order_claim_records (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            line_user_id TEXT NOT NULL,
+            line_display_name TEXT,
+            claim_type TEXT NOT NULL,
+            lookup_value TEXT,
+            amount TEXT,
+            payment_no TEXT,
+            points INTEGER NOT NULL,
+            source_key TEXT,
+            source_sheet TEXT NOT NULL,
+            source_row INTEGER NOT NULL,
+            payment_method TEXT,
+            status TEXT NOT NULL DEFAULT 'claimed',
+            input_payload_json TEXT,
+            sheet_writeback_status TEXT,
+            sheet_writeback_message TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+
+
+def postgres_order_claim_records_schema():
+    return """
+        CREATE TABLE IF NOT EXISTS order_claim_records (
+            id SERIAL PRIMARY KEY,
+            line_user_id TEXT NOT NULL,
+            line_display_name TEXT,
+            claim_type TEXT NOT NULL,
+            lookup_value TEXT,
+            amount TEXT,
+            payment_no TEXT,
+            points INTEGER NOT NULL,
+            source_key TEXT,
+            source_sheet TEXT NOT NULL,
+            source_row INTEGER NOT NULL,
+            payment_method TEXT,
+            status TEXT NOT NULL DEFAULT 'claimed',
+            input_payload_json TEXT,
+            sheet_writeback_status TEXT,
+            sheet_writeback_message TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+
+
+def ensure_order_claim_source_key(db):
+    ensure_column(db, "order_claim_records", "source_key", "TEXT")
+    if db.is_postgres:
+        drop_postgres_order_claim_source_row_unique(db)
+    else:
+        rebuild_sqlite_order_claim_records_without_row_unique(db)
+
+    db.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_order_claim_records_source_key_unique "
+        "ON order_claim_records(source_key)"
+    )
+    db.execute("CREATE INDEX IF NOT EXISTS idx_order_claim_records_source ON order_claim_records(source_sheet, source_row)")
+
+
+def drop_postgres_order_claim_source_row_unique(db):
+    rows = db.execute(
+        """
+        SELECT conname
+        FROM pg_constraint
+        WHERE conrelid = 'order_claim_records'::regclass
+          AND contype = 'u'
+          AND pg_get_constraintdef(oid) ILIKE '%source_sheet%'
+          AND pg_get_constraintdef(oid) ILIKE '%source_row%'
+        """
+    ).fetchall()
+    for row in rows:
+        constraint_name = validate_identifier(row["conname"])
+        db.execute(f"ALTER TABLE order_claim_records DROP CONSTRAINT {constraint_name}")
+
+
+def rebuild_sqlite_order_claim_records_without_row_unique(db):
+    row = db.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'order_claim_records'"
+    ).fetchone()
+    create_sql = (row["sql"] if row else "") or ""
+    normalized_sql = re.sub(r"\s+", "", create_sql).upper()
+    if "UNIQUE(SOURCE_SHEET,SOURCE_ROW)" not in normalized_sql:
+        return
+
+    temp_table = "order_claim_records_row_unique_legacy"
+    suffix = 0
+    while db.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+        (temp_table,),
+    ).fetchone():
+        suffix += 1
+        temp_table = f"order_claim_records_row_unique_legacy_{suffix}"
+
+    db.execute(f"ALTER TABLE order_claim_records RENAME TO {temp_table}")
+    db.execute(sqlite_order_claim_records_schema())
+
+    columns = [
+        "id",
+        "line_user_id",
+        "line_display_name",
+        "claim_type",
+        "lookup_value",
+        "amount",
+        "payment_no",
+        "points",
+        "source_key",
+        "source_sheet",
+        "source_row",
+        "payment_method",
+        "status",
+        "input_payload_json",
+        "sheet_writeback_status",
+        "sheet_writeback_message",
+        "created_at",
+        "updated_at",
+    ]
+    legacy_columns = table_columns(db, temp_table)
+    select_columns = [column if column in legacy_columns else f"NULL AS {column}" for column in columns]
+    db.execute(
+        f"""
+        INSERT INTO order_claim_records ({", ".join(columns)})
+        SELECT {", ".join(select_columns)}
+        FROM {temp_table}
+        """
+    )
+    db.execute(f"DROP TABLE {temp_table}")
 
 
 def reset_sequences(db, table_names):

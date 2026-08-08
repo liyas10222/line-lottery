@@ -1,5 +1,6 @@
 import json
 import re
+import hashlib
 import unicodedata
 import urllib.parse
 from decimal import Decimal, InvalidOperation
@@ -50,6 +51,25 @@ def decimal_key(value):
         return ""
     normalized = number.normalize()
     return format(normalized, "f")
+
+
+def order_source_key(order):
+    payment_method = normalize_lookup(order.get("paymentMethod"))
+    payment_no = normalize_lookup(order.get("paymentNo"))
+    if payment_method == normalize_lookup(SYSTEM_STORE_PAYMENT) and payment_no:
+        raw_key = f"store|payment_no:{payment_no}"
+        return f"order:{hashlib.sha256(raw_key.encode('utf-8')).hexdigest()}"
+
+    raw_key = "|".join(
+        [
+            "remittance",
+            f"order_info:{normalize_lookup(order.get('orderInfo'))}",
+            f"amount:{decimal_key(order.get('amount'))}",
+            f"payment_method:{payment_method}",
+            f"points:{parse_positive_int(order.get('pointsRaw')) or order.get('points') or ''}",
+        ]
+    )
+    return f"order:{hashlib.sha256(raw_key.encode('utf-8')).hexdigest()}"
 
 
 def parse_positive_int(value):
@@ -160,8 +180,12 @@ def fetch_order_claim_rows(session):
                 "points": points,
                 "uid": uid,
                 "role": role,
+                "sourceKey": None,
             }
         )
+
+    for order in orders:
+        order["sourceKey"] = order_source_key(order)
 
     return {"sheetTitle": sheet_title, "orders": orders}, None
 
@@ -275,6 +299,7 @@ def claim_order_spins(payload):
     order = matches[0]
     timestamp = now_iso()
     sheet_title = sheet_data["sheetTitle"]
+    source_key = order["sourceKey"]
     input_payload = build_input_payload(criteria, order, payload)
 
     with get_db() as db:
@@ -308,6 +333,7 @@ def claim_order_spins(payload):
                         amount,
                         payment_no,
                         points,
+                        source_key,
                         source_sheet,
                         source_row,
                         payment_method,
@@ -316,8 +342,8 @@ def claim_order_spins(payload):
                         created_at,
                         updated_at
                     )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'claimed', ?, ?, ?)
-                ON CONFLICT(source_sheet, source_row) DO NOTHING
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'claimed', ?, ?, ?)
+                ON CONFLICT(source_key) DO NOTHING
                 """,
                 (
                     line_user_id,
@@ -327,6 +353,7 @@ def claim_order_spins(payload):
                     input_payload.get("amount"),
                     input_payload.get("paymentNo"),
                     order["points"],
+                    source_key,
                     sheet_title,
                     order["rowNumber"],
                     order["paymentMethod"],
@@ -341,8 +368,8 @@ def claim_order_spins(payload):
                     "order_claim_duplicate_rejected",
                     level="warning",
                     line_user_id=line_user_id,
-                    message="Order claim rejected because source row was already claimed",
-                    payload={"sheet": sheet_title, "rowNumber": order["rowNumber"]},
+                    message="Order claim rejected because source key was already claimed",
+                    payload={"sheet": sheet_title, "rowNumber": order["rowNumber"], "sourceKey": source_key},
                 )
                 return {"ok": False, "message": GENERIC_NOT_FOUND_MESSAGE}, 200
 
@@ -366,7 +393,7 @@ def claim_order_spins(payload):
             raise
 
     sheet_writeback = mark_order_claim_issued(session, sheet_title, order["rowNumber"])
-    record_sheet_writeback(line_user_id, sheet_title, order["rowNumber"], sheet_writeback)
+    record_sheet_writeback(line_user_id, source_key, sheet_title, order["rowNumber"], sheet_writeback)
 
     result = {
         "ok": True,
@@ -385,6 +412,7 @@ def claim_order_spins(payload):
             "points": order["points"],
             "sheet": sheet_title,
             "rowNumber": order["rowNumber"],
+            "sourceKey": source_key,
             "claimType": input_payload["claimType"],
             "sheetWriteback": sheet_writeback,
         },
@@ -401,6 +429,7 @@ def build_input_payload(criteria, order, payload):
         "paymentNo": clean_text(criteria.get("paymentNo"), 120),
         "paymentMethod": order.get("paymentMethod"),
         "sourceRow": order.get("rowNumber"),
+        "sourceKey": order.get("sourceKey"),
         "lineUserId": validate_line_user_id(payload.get("lineUserId")),
     }
 
@@ -426,7 +455,7 @@ def mark_order_claim_issued(session, sheet_title, row_number):
     return {"ok": True, "cell": f"Q{row_number}", "value": True, "response": data}
 
 
-def record_sheet_writeback(line_user_id, sheet_title, row_number, sheet_writeback):
+def record_sheet_writeback(line_user_id, source_key, sheet_title, row_number, sheet_writeback):
     timestamp = now_iso()
     with get_db() as db:
         db.execute(
@@ -436,16 +465,14 @@ def record_sheet_writeback(line_user_id, sheet_title, row_number, sheet_writebac
                 sheet_writeback_message = ?,
                 updated_at = ?
             WHERE line_user_id = ?
-              AND source_sheet = ?
-              AND source_row = ?
+              AND source_key = ?
             """,
             (
                 "ok" if sheet_writeback.get("ok") else "error",
                 clean_text(sheet_writeback.get("message") or "", 1000),
                 timestamp,
                 line_user_id,
-                sheet_title,
-                row_number,
+                source_key,
             ),
         )
         db.commit()
@@ -509,6 +536,7 @@ def list_order_claim_records(filters):
                 ocr.amount,
                 ocr.payment_no,
                 ocr.points,
+                ocr.source_key,
                 ocr.source_sheet,
                 ocr.source_row,
                 ocr.payment_method,
@@ -536,6 +564,7 @@ def list_order_claim_records(filters):
             "amount": row["amount"],
             "paymentNo": row["payment_no"],
             "points": row["points"],
+            "sourceKey": row["source_key"],
             "sourceSheet": row["source_sheet"],
             "sourceRow": row["source_row"],
             "paymentMethod": row["payment_method"],
