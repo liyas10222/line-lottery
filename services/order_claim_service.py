@@ -57,7 +57,14 @@ def order_source_key(order):
     payment_method = normalize_lookup(order.get("paymentMethod"))
     payment_no = normalize_lookup(order.get("paymentNo"))
     if payment_method == normalize_lookup(SYSTEM_STORE_PAYMENT) and payment_no:
-        raw_key = f"store|payment_no:{payment_no}"
+        raw_key = "|".join(
+            [
+                "store",
+                f"payment_no:{payment_no}",
+                f"uid:{normalize_lookup(order.get('uid'))}",
+                f"role:{normalize_lookup(order.get('role'))}",
+            ]
+        )
         return f"order:{hashlib.sha256(raw_key.encode('utf-8')).hexdigest()}"
 
     raw_key = "|".join(
@@ -200,17 +207,24 @@ def eligible_order(order):
     return not order["isIssued"] and order["points"] is not None and order["points"] > 0
 
 
-def match_store_order(orders, payment_no):
+def match_store_order(orders, payment_no, lookup_value):
     normalized_payment_no = normalize_lookup(payment_no)
-    if not normalized_payment_no:
+    normalized_lookup = normalize_lookup(lookup_value)
+    if not normalized_payment_no or not normalized_lookup:
         return []
-    return [
+    candidates = [
         order
         for order in orders
         if eligible_order(order)
         and normalize_lookup(order["paymentMethod"]) == normalize_lookup(SYSTEM_STORE_PAYMENT)
         and normalize_lookup(order["paymentNo"]) == normalized_payment_no
     ]
+
+    uid_matches = [order for order in candidates if normalize_lookup(order["uid"]) == normalized_lookup]
+    if uid_matches:
+        return uid_matches
+
+    return [order for order in candidates if normalize_lookup(order["role"]) == normalized_lookup]
 
 
 def match_remittance_order(orders, lookup_value, amount):
@@ -238,10 +252,12 @@ def select_claim_match(payload, orders):
     claim_type = clean_text(payload.get("claimType"), 40)
     if claim_type == "store":
         payment_no = clean_text(payload.get("paymentNo"), 120)
-        return match_store_order(orders, payment_no), {
+        lookup_value = clean_text(payload.get("lookupValue"), 160)
+        return match_store_order(orders, payment_no, lookup_value), {
             "claimType": "store",
-            "matchType": "payment_no",
+            "matchType": "payment_no_and_uid_or_name",
             "paymentNo": payment_no,
+            "lookupValue": lookup_value,
         }
 
     if claim_type == "remittance":

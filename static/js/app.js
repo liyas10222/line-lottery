@@ -454,11 +454,13 @@ async function claimSpins() {
   };
 
   if (claimType === "store") {
+    const lookupValue = document.getElementById("claimStoreLookupValue")?.value.trim() || "";
     const paymentNo = document.getElementById("claimPaymentNo")?.value.trim() || "";
-    if (!paymentNo) {
-      setClaimResult("請輸入繳款編號。", true);
+    if (!lookupValue || !paymentNo) {
+      setClaimResult("請輸入 UID / 角色名稱與繳款編號。", true);
       return;
     }
+    payload.lookupValue = lookupValue;
     payload.paymentNo = paymentNo;
   } else {
     const lookupValue = document.getElementById("claimLookupValue")?.value.trim() || "";
@@ -503,7 +505,7 @@ async function claimSpins() {
 }
 
 function clearClaimInputs() {
-  ["claimPaymentNo", "claimLookupValue", "claimAmount"].forEach((id) => {
+  ["claimStoreLookupValue", "claimPaymentNo", "claimLookupValue", "claimAmount"].forEach((id) => {
     const input = document.getElementById(id);
     if (input) input.value = "";
   });

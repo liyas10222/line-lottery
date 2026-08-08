@@ -598,7 +598,7 @@ function renderOrderClaimRecordRow(record) {
   const writebackOk = record.sheetWritebackStatus === "ok";
   const statusClass = writebackOk ? "is-active" : "is-muted";
   const claimInfo = record.claimType === "store"
-    ? `繳款編號：${record.paymentNo || "-"}`
+    ? `輸入：${record.lookupValue || "-"} / 繳款編號：${record.paymentNo || "-"}`
     : `輸入：${record.lookupValue || "-"} / 金額：${record.amount || "-"}`;
 
   return `
