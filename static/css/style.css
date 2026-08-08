@@ -1309,6 +1309,29 @@ h3 {
   gap: 4px;
 }
 
+.member-row {
+  grid-template-columns: 48px minmax(0, 1fr);
+}
+
+.member-row-actions {
+  grid-column: 1 / -1;
+  justify-content: flex-start;
+}
+
+.member-row .compact-button {
+  grid-column: auto;
+}
+
+.member-user-id {
+  display: block;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
 @media (min-width: 960px) {
   .actions {
     grid-template-columns: repeat(3, minmax(0, 1fr));

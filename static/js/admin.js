@@ -369,7 +369,7 @@ async function loadMembers() {
           : `<div class="member-avatar member-avatar-placeholder">${escapeHtml((member.displayName || "?").slice(0, 1))}</div>`}
         <div class="member-main">
           <strong>${escapeHtml(member.displayName)}</strong>
-          <span>${escapeHtml(member.lineUserId)}</span>
+          <span class="member-user-id" title="${escapeHtml(member.lineUserId)}">${escapeHtml(member.lineUserId)}</span>
           <div class="member-stats">
             <span>已用 ${member.usedCount ?? member.todayUsed}</span>
             <span>可抽 ${member.remaining}</span>
@@ -408,6 +408,11 @@ function handleMemberListClick(event) {
 
   if (button.dataset.action === "view-claims") {
     document.getElementById("claimSearch").value = member.lineUserId;
+    const claimPanel = document.getElementById("claimRecordPanel");
+    if (claimPanel) {
+      claimPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    setClaimRecordListMessage(`正在查詢 ${member.displayName} 的領取點數紀錄...`);
     loadOrderClaimRecords().catch(showError);
     setAdminMessage(`正在查詢 ${member.displayName} 的領取點數紀錄。`);
     return;
@@ -525,13 +530,27 @@ async function loadOrderClaimRecords() {
     const q = document.getElementById("claimSearch").value.trim();
     const params = new URLSearchParams({ limit: "100" });
     if (q) params.set("q", q);
+    setClaimRecordListMessage("正在查詢領取點數紀錄...");
     const data = await adminFetch(`/api/admin/order-claims?${params.toString()}`);
     const list = document.getElementById("claimRecordList");
-    list.innerHTML = data.records.map(renderOrderClaimRecordRow).join("") || `<div class="empty-cell">查無領取點數紀錄</div>`;
+    list.innerHTML = data.records.map(renderOrderClaimRecordRow).join("") || emptyClaimRecordMessage(q);
     setAdminMessage(`領取點數紀錄已更新，共 ${data.records.length} 筆。`);
   } catch (error) {
     showError(error);
   }
+}
+
+function setClaimRecordListMessage(message) {
+  const list = document.getElementById("claimRecordList");
+  if (!list) return;
+  list.innerHTML = `<div class="empty-cell">${escapeHtml(message)}</div>`;
+}
+
+function emptyClaimRecordMessage(keyword = "") {
+  const suffix = keyword
+    ? "此區只顯示由前台自動領取成功後產生的紀錄；舊的人工加點或試算表已發放列不會自動回補。"
+    : "尚未有前台自動領取紀錄。";
+  return `<div class="empty-cell">查無領取點數紀錄。${escapeHtml(suffix)}</div>`;
 }
 
 function renderOrderClaimRecordRow(record) {
