@@ -403,6 +403,23 @@ h3 {
   gap: 10px;
 }
 
+.record-query-toolbar {
+  display: grid;
+  grid-template-columns: minmax(140px, .7fr) minmax(220px, 1.5fr) minmax(140px, .7fr) auto;
+  align-items: end;
+}
+
+.record-query-toolbar .admin-input,
+.record-query-toolbar .ghost-button {
+  min-width: 0;
+}
+
+@media (max-width: 760px) {
+  .record-query-toolbar {
+    grid-template-columns: 1fr;
+  }
+}
+
 .actions {
   display: grid;
   grid-template-columns: 1fr;

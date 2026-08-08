@@ -37,11 +37,12 @@ function bindAdmin() {
   document.getElementById("claimSearch").addEventListener("keydown", (event) => {
     if (event.key === "Enter") loadOrderClaimRecords();
   });
-  document.getElementById("loadRecordsButton").addEventListener("click", loadLotteryRecords);
+  document.getElementById("loadRecordsButton").addEventListener("click", loadDailyRecords);
   document.getElementById("recordSearch").addEventListener("keydown", (event) => {
-    if (event.key === "Enter") loadLotteryRecords();
+    if (event.key === "Enter") loadDailyRecords();
   });
-  document.getElementById("recordStatusFilter").addEventListener("change", loadLotteryRecords);
+  document.getElementById("recordTypeFilter").addEventListener("change", handleRecordTypeChange);
+  document.getElementById("recordStatusFilter").addEventListener("change", loadDailyRecords);
   document.getElementById("sheetStatusButton").addEventListener("click", loadSheetStatus);
   document.getElementById("sheetSetupButton").addEventListener("click", setupSheet);
   document.getElementById("sheetSyncButton").addEventListener("click", syncSheet);
@@ -201,7 +202,8 @@ function renderAdminUnlocked() {
 }
 
 async function loadDashboard() {
-  await Promise.all([loadMembers(), loadLotteryRecords(), loadOrderClaimRecords()]);
+  updateRecordQueryUi();
+  await Promise.all([loadMembers(), loadDailyRecords()]);
 }
 
 function saveToken() {
@@ -399,21 +401,23 @@ function handleMemberListClick(event) {
   if (!member) return;
 
   if (button.dataset.action === "view-records") {
+    document.getElementById("recordTypeFilter").value = "lottery";
     document.getElementById("recordSearch").value = member.lineUserId;
     document.getElementById("recordStatusFilter").value = "";
-    loadLotteryRecords().catch(showError);
+    updateRecordQueryUi();
+    document.getElementById("recordList")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    loadDailyRecords().catch(showError);
     setAdminMessage(`正在查詢 ${member.displayName} 的抽獎紀錄。`);
     return;
   }
 
   if (button.dataset.action === "view-claims") {
-    document.getElementById("claimSearch").value = member.lineUserId;
-    const claimPanel = document.getElementById("claimRecordPanel");
-    if (claimPanel) {
-      claimPanel.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
+    document.getElementById("recordTypeFilter").value = "claims";
+    document.getElementById("recordSearch").value = member.lineUserId;
+    updateRecordQueryUi();
+    document.getElementById("recordList")?.scrollIntoView({ behavior: "smooth", block: "start" });
     setClaimRecordListMessage(`正在查詢 ${member.displayName} 的領取點數紀錄...`);
-    loadOrderClaimRecords().catch(showError);
+    loadDailyRecords().catch(showError);
     setAdminMessage(`正在查詢 ${member.displayName} 的領取點數紀錄。`);
     return;
   }
@@ -491,6 +495,43 @@ async function deleteMember(lineUserId, displayName = "") {
   }
 }
 
+function currentRecordType() {
+  return document.getElementById("recordTypeFilter")?.value || "lottery";
+}
+
+function updateRecordQueryUi() {
+  const isClaims = currentRecordType() === "claims";
+  const search = document.getElementById("recordSearch");
+  const statusFilter = document.getElementById("recordStatusFilter");
+  const button = document.getElementById("loadRecordsButton");
+
+  if (search) {
+    search.placeholder = isClaims
+      ? "搜尋 LINE userId、名稱、UID、金額或繳款編號"
+      : "搜尋 LINE 名稱、userId、獎項或序號";
+  }
+  if (statusFilter) {
+    statusFilter.hidden = isClaims;
+    statusFilter.disabled = isClaims;
+  }
+  if (button) {
+    button.textContent = isClaims ? "查詢領取紀錄" : "查詢抽獎紀錄";
+  }
+}
+
+function handleRecordTypeChange() {
+  updateRecordQueryUi();
+  loadDailyRecords().catch(showError);
+}
+
+async function loadDailyRecords() {
+  updateRecordQueryUi();
+  if (currentRecordType() === "claims") {
+    return loadOrderClaimRecords();
+  }
+  return loadLotteryRecords();
+}
+
 async function loadLotteryRecords() {
   try {
     const q = document.getElementById("recordSearch").value.trim();
@@ -527,12 +568,12 @@ function renderLotteryRecordRow(record) {
 
 async function loadOrderClaimRecords() {
   try {
-    const q = document.getElementById("claimSearch").value.trim();
+    const q = document.getElementById("recordSearch").value.trim();
     const params = new URLSearchParams({ limit: "100" });
     if (q) params.set("q", q);
     setClaimRecordListMessage("正在查詢領取點數紀錄...");
     const data = await adminFetch(`/api/admin/order-claims?${params.toString()}`);
-    const list = document.getElementById("claimRecordList");
+    const list = document.getElementById("recordList");
     list.innerHTML = data.records.map(renderOrderClaimRecordRow).join("") || emptyClaimRecordMessage(q);
     setAdminMessage(`領取點數紀錄已更新，共 ${data.records.length} 筆。`);
   } catch (error) {
@@ -541,7 +582,7 @@ async function loadOrderClaimRecords() {
 }
 
 function setClaimRecordListMessage(message) {
-  const list = document.getElementById("claimRecordList");
+  const list = document.getElementById("recordList");
   if (!list) return;
   list.innerHTML = `<div class="empty-cell">${escapeHtml(message)}</div>`;
 }

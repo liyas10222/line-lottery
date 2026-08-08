@@ -90,7 +90,7 @@
               <pre id="memberOutput" class="admin-output compact-output"></pre>
             </div>
 
-            <div id="claimRecordPanel" class="admin-edit-panel admin-claim-record-panel">
+            <div id="claimRecordPanel" class="admin-edit-panel admin-claim-record-panel" hidden>
               <div class="admin-section-heading">
                 <div>
                   <p class="eyebrow">自動領取</p>
@@ -114,7 +114,11 @@
               </div>
               <span class="status-pill is-active">常用</span>
             </div>
-            <div class="admin-toolbar">
+            <div class="admin-toolbar record-query-toolbar">
+              <select id="recordTypeFilter" class="admin-input admin-select" aria-label="查詢類型">
+                <option value="lottery">抽獎紀錄</option>
+                <option value="claims">自動領取紀錄</option>
+              </select>
               <input id="recordSearch" class="admin-input" type="search" placeholder="搜尋 LINE 名稱、userId、獎項或序號">
               <select id="recordStatusFilter" class="admin-input admin-select" aria-label="抽獎紀錄狀態">
                 <option value="">全部紀錄</option>
