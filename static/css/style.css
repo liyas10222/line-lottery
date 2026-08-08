@@ -73,8 +73,8 @@ button {
   grid-template-areas:
     "profile"
     "wheel"
-    "controls"
-    "result";
+    "result"
+    "controls";
 }
 
 .profile-panel,
@@ -270,51 +270,28 @@ h3 {
 }
 
 .claim-card {
-  padding: 0;
-  overflow: hidden;
+  display: grid;
+  gap: 12px;
+  padding: 16px;
 }
 
-.claim-summary {
-  min-height: 58px;
-  padding: 13px 16px;
+.claim-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  cursor: pointer;
-  list-style: none;
 }
 
-.claim-summary::-webkit-details-marker {
-  display: none;
-}
-
-.claim-summary::after {
-  content: "+";
-  width: 28px;
-  height: 28px;
-  display: grid;
-  place-items: center;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, .07);
-  color: var(--gold);
-  font-weight: 900;
-}
-
-.claim-details[open] .claim-summary::after {
-  content: "−";
-}
-
-.claim-summary > span {
+.claim-heading > span {
   display: grid;
   gap: 3px;
 }
 
-.claim-summary strong {
+.claim-heading strong {
   font-size: 1.02rem;
 }
 
-.claim-summary small {
+.claim-heading small {
   margin-left: auto;
   color: var(--muted);
 }
@@ -322,8 +299,8 @@ h3 {
 .claim-body {
   display: grid;
   gap: 12px;
-  padding: 0 16px 16px;
   border-top: 1px solid var(--border);
+  padding-top: 12px;
 }
 
 .claim-mode-group {
@@ -1410,7 +1387,8 @@ h3 {
     grid-template-columns: minmax(0, .94fr) minmax(340px, 1.06fr);
     grid-template-areas:
       "profile wheel"
-      "controls result";
+      "profile result"
+      "profile controls";
     align-items: start;
   }
 
@@ -1422,8 +1400,9 @@ h3 {
 
   .lottery-controls-panel {
     border-top: 1px solid var(--border);
-    border-right: 1px solid var(--border);
-    align-self: stretch;
+    border-right: 0;
+    align-self: start;
+    padding-top: clamp(18px, 2.4vw, 28px);
   }
 
   .wheel-panel {
@@ -1438,7 +1417,7 @@ h3 {
 
   .result-box {
     align-self: start;
-    margin: 0 auto clamp(18px, 3vw, 34px);
+    margin: 0 auto;
   }
 
   .admin-grid {
@@ -1524,16 +1503,16 @@ h3 {
     align-items: flex-start;
   }
 
-  .claim-summary {
-    padding: 12px 14px;
+  .claim-heading {
+    align-items: flex-start;
   }
 
-  .claim-summary small {
+  .claim-heading small {
     display: none;
   }
 
   .claim-body {
-    padding: 0 14px 14px;
+    padding-top: 12px;
   }
 
   .avatar {

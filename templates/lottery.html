@@ -48,14 +48,14 @@
 
         <div id="message" class="message">正在初始化 LIFF...</div>
 
-        <details id="claimCard" class="claim-card claim-details">
-          <summary class="claim-summary">
+        <div id="claimCard" class="claim-card">
+          <div class="claim-heading">
             <span>
               <span class="profile-label">抽獎次數</span>
               <strong id="claimTitle">領取抽獎次數</strong>
             </span>
             <small>輸入訂單資訊</small>
-          </summary>
+          </div>
 
           <div class="claim-body">
             <div class="claim-mode-group" role="radiogroup" aria-label="付款方式">
@@ -90,7 +90,7 @@
             <button id="claimSpinsButton" class="ghost-button claim-button" type="button" disabled>領取抽獎次數</button>
             <p id="claimResult" class="claim-result">請先登入 LINE 後領取。</p>
           </div>
-        </details>
+        </div>
 
       </div>
 
@@ -99,6 +99,11 @@
           <div class="pointer" aria-hidden="true"></div>
           <div id="wheel" class="wheel" aria-hidden="true"></div>
         </div>
+      </div>
+
+      <div id="result" class="result-box single-result-box">
+        <span>抽獎結果</span>
+        <strong>尚未抽獎</strong>
       </div>
 
       <div class="lottery-controls-panel">
@@ -114,11 +119,6 @@
           <input id="skipAnimation" type="checkbox">
           <span>跳過動畫，直接顯示結果</span>
         </label>
-      </div>
-
-      <div id="result" class="result-box single-result-box">
-        <span>抽獎結果</span>
-        <strong>尚未抽獎</strong>
       </div>
     </section>
 
