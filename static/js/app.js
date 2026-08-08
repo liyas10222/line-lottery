@@ -435,6 +435,11 @@ function setClaimResult(text, isError = false) {
   message.classList.toggle("is-error", isError);
 }
 
+function openClaimCard() {
+  const claimCard = document.getElementById("claimCard");
+  if (claimCard) claimCard.open = true;
+}
+
 async function claimSpins() {
   if (!state.profile || state.claiming || state.spinning) {
     setClaimResult("請先登入 LINE 後再領取。", true);
@@ -467,6 +472,7 @@ async function claimSpins() {
   }
 
   state.claiming = true;
+  openClaimCard();
   updateSpinButtons();
   setClaimResult("正在確認訂單資料...");
 

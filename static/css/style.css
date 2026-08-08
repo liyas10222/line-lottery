@@ -270,16 +270,60 @@ h3 {
 }
 
 .claim-card {
-  display: grid;
-  gap: 14px;
-  padding: 16px;
+  padding: 0;
+  overflow: hidden;
 }
 
-.claim-card-heading {
+.claim-summary {
+  min-height: 58px;
+  padding: 13px 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.claim-summary::-webkit-details-marker {
+  display: none;
+}
+
+.claim-summary::after {
+  content: "+";
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .07);
+  color: var(--gold);
+  font-weight: 900;
+}
+
+.claim-details[open] .claim-summary::after {
+  content: "−";
+}
+
+.claim-summary > span {
+  display: grid;
+  gap: 3px;
+}
+
+.claim-summary strong {
+  font-size: 1.02rem;
+}
+
+.claim-summary small {
+  margin-left: auto;
+  color: var(--muted);
+}
+
+.claim-body {
+  display: grid;
+  gap: 12px;
+  padding: 0 16px 16px;
+  border-top: 1px solid var(--border);
 }
 
 .claim-mode-group {
@@ -310,7 +354,7 @@ h3 {
 
 .claim-fields {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .claim-fields label {
@@ -322,7 +366,7 @@ h3 {
 
 .claim-input {
   width: 100%;
-  min-height: 44px;
+  min-height: 42px;
   padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -343,6 +387,7 @@ h3 {
   margin: 0;
   color: var(--muted);
   line-height: 1.5;
+  font-size: .9rem;
 }
 
 .claim-result.is-error {
@@ -1349,31 +1394,34 @@ h3 {
     grid-template-areas:
       "profile wheel"
       "controls result";
-    align-items: stretch;
+    align-items: start;
   }
 
   .profile-panel {
     border-right: 1px solid var(--border);
     border-bottom: 0;
+    align-content: start;
   }
 
   .lottery-controls-panel {
     border-top: 1px solid var(--border);
     border-right: 1px solid var(--border);
+    align-self: stretch;
   }
 
   .wheel-panel {
-    align-content: end;
-    padding-bottom: 20px;
+    align-content: start;
+    padding-top: clamp(22px, 3.2vw, 38px);
+    padding-bottom: 16px;
   }
 
   .wheel-wrap {
-    width: min(46vw, 540px);
+    width: min(43vw, 520px);
   }
 
   .result-box {
     align-self: start;
-    margin: 0 auto clamp(20px, 4vw, 42px);
+    margin: 0 auto clamp(18px, 3vw, 34px);
   }
 
   .admin-grid {
@@ -1457,6 +1505,18 @@ h3 {
 
   .profile-row {
     align-items: flex-start;
+  }
+
+  .claim-summary {
+    padding: 12px 14px;
+  }
+
+  .claim-summary small {
+    display: none;
+  }
+
+  .claim-body {
+    padding: 0 14px 14px;
   }
 
   .avatar {
