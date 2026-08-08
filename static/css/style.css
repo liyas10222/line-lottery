@@ -382,13 +382,24 @@ h3 {
 
 .record-query-toolbar {
   display: grid;
-  grid-template-columns: minmax(140px, .7fr) minmax(220px, 1.5fr) minmax(140px, .7fr) auto;
+  grid-template-columns: minmax(130px, .65fr) minmax(220px, 1.35fr) minmax(130px, .65fr) minmax(140px, auto);
   align-items: end;
 }
 
 .record-query-toolbar .admin-input,
 .record-query-toolbar .ghost-button {
   min-width: 0;
+}
+
+.record-query-toolbar .ghost-button {
+  width: 100%;
+  white-space: nowrap;
+}
+
+@media (max-width: 1100px) {
+  .record-query-toolbar {
+    grid-template-columns: minmax(120px, .8fr) minmax(220px, 1.2fr);
+  }
 }
 
 @media (max-width: 760px) {
