@@ -317,6 +317,30 @@ def create_sqlite_schema(db):
         )
         """
     )
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS order_claim_records (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            line_user_id TEXT NOT NULL,
+            line_display_name TEXT,
+            claim_type TEXT NOT NULL,
+            lookup_value TEXT,
+            amount TEXT,
+            payment_no TEXT,
+            points INTEGER NOT NULL,
+            source_sheet TEXT NOT NULL,
+            source_row INTEGER NOT NULL,
+            payment_method TEXT,
+            status TEXT NOT NULL DEFAULT 'claimed',
+            input_payload_json TEXT,
+            sheet_writeback_status TEXT,
+            sheet_writeback_message TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(source_sheet, source_row)
+        )
+        """
+    )
 
 
 def create_postgres_schema(db):
@@ -448,6 +472,30 @@ def create_postgres_schema(db):
         )
         """
     )
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS order_claim_records (
+            id SERIAL PRIMARY KEY,
+            line_user_id TEXT NOT NULL,
+            line_display_name TEXT,
+            claim_type TEXT NOT NULL,
+            lookup_value TEXT,
+            amount TEXT,
+            payment_no TEXT,
+            points INTEGER NOT NULL,
+            source_sheet TEXT NOT NULL,
+            source_row INTEGER NOT NULL,
+            payment_method TEXT,
+            status TEXT NOT NULL DEFAULT 'claimed',
+            input_payload_json TEXT,
+            sheet_writeback_status TEXT,
+            sheet_writeback_message TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(source_sheet, source_row)
+        )
+        """
+    )
 
 
 def create_indexes(db):
@@ -459,6 +507,8 @@ def create_indexes(db):
     db.execute("CREATE INDEX IF NOT EXISTS idx_operation_logs_created ON operation_logs(created_at)")
     db.execute("CREATE INDEX IF NOT EXISTS idx_operation_logs_type_level ON operation_logs(event_type, level)")
     db.execute("CREATE INDEX IF NOT EXISTS idx_admin_line_users_line_user_id ON admin_line_users(line_user_id)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_order_claim_records_user_created ON order_claim_records(line_user_id, created_at)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_order_claim_records_source ON order_claim_records(source_sheet, source_row)")
 
 
 def ensure_common_columns(db):

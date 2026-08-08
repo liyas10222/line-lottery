@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, request
 
 from services.lottery_service import is_admin_line_user_id, sync_member
+from services.order_claim_service import claim_order_spins
 
 
 member_bp = Blueprint("member", __name__, url_prefix="/api/member")
@@ -24,3 +25,10 @@ def sync_alias():
 def admin_status():
     line_user_id = request.args.get("lineUserId", "").strip()
     return jsonify({"ok": True, "isAdmin": is_admin_line_user_id(line_user_id)})
+
+
+@member_bp.post("/claim-spins")
+def claim_spins():
+    payload = request.get_json(silent=True) or {}
+    result, status_code = claim_order_spins(payload)
+    return jsonify(result), status_code

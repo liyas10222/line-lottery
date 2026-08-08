@@ -14,6 +14,7 @@ BACKUP_TABLES = [
     "prizes",
     "prize_serials",
     "member_spin_limits",
+    "order_claim_records",
     "admin_line_users",
     "app_settings",
     "operation_logs",

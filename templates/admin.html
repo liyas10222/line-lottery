@@ -89,6 +89,21 @@
               </div>
               <pre id="memberOutput" class="admin-output compact-output"></pre>
             </div>
+
+            <div class="admin-edit-panel admin-claim-record-panel">
+              <div class="admin-section-heading">
+                <div>
+                  <p class="eyebrow">自動領取</p>
+                  <h3>領取點數紀錄</h3>
+                </div>
+                <span class="status-pill is-muted">會員查核</span>
+              </div>
+              <div class="admin-toolbar">
+                <input id="claimSearch" class="admin-input" type="search" placeholder="搜尋 LINE userId、名稱、UID、金額或繳款編號">
+                <button id="loadClaimRecordsButton" class="ghost-button" type="button">查詢領取紀錄</button>
+              </div>
+              <div id="claimRecordList" class="admin-list admin-scroll-panel compact-scroll-panel"></div>
+            </div>
           </section>
 
           <section class="admin-card admin-card-wide">

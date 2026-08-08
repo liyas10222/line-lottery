@@ -44,6 +44,7 @@ const state = {
   canSpin: false,
   remaining: 0,
   spinning: false,
+  claiming: false,
   historyRecords: [],
   historyPage: 1,
   historyStatusFilter: "",
@@ -107,6 +108,10 @@ function bindLotteryButtons() {
   document.getElementById("spinButton").addEventListener("click", spinLottery);
   document.getElementById("bulkDrawButton").addEventListener("click", bulkDrawLottery);
   document.getElementById("drawAllButton").addEventListener("click", drawAllLottery);
+  document.getElementById("claimSpinsButton")?.addEventListener("click", claimSpins);
+  document.querySelectorAll('input[name="claimType"]').forEach((input) => {
+    input.addEventListener("change", updateClaimMode);
+  });
   document.getElementById("result").addEventListener("click", handleResultClick);
   document.getElementById("historyButton").addEventListener("click", () => {
     window.location.href = "/history";
@@ -252,6 +257,8 @@ function renderLoggedOut() {
   state.canSpin = false;
   state.remaining = 0;
   updateSpinButtons();
+  updateClaimMode();
+  setClaimResult("請先登入 LINE 後領取。");
   setMessage("請先使用 LINE 登入後再開始抽獎。");
 }
 
@@ -259,6 +266,8 @@ function renderLoggedIn(profile) {
   document.getElementById("authLoggedOut").hidden = true;
   document.getElementById("authLoggedIn").hidden = false;
   renderProfile(profile);
+  updateClaimMode();
+  setClaimResult("輸入訂單資訊後即可領取抽獎次數。");
 }
 
 async function renderAdminEntry(lineUserId) {
@@ -376,13 +385,15 @@ function updateSpinButtons() {
   const bulkButton = document.getElementById("bulkDrawButton");
   const drawAllButton = document.getElementById("drawAllButton");
   const loggedIn = Boolean(state.profile);
-  const canSingle = loggedIn && state.remaining >= 1 && !state.spinning;
-  const canBulk = loggedIn && state.remaining >= 10 && !state.spinning;
-  const canDrawAll = loggedIn && state.remaining >= 1 && !state.spinning;
+  const isBusy = state.spinning || state.claiming;
+  const canSingle = loggedIn && state.remaining >= 1 && !isBusy;
+  const canBulk = loggedIn && state.remaining >= 10 && !isBusy;
+  const canDrawAll = loggedIn && state.remaining >= 1 && !isBusy;
 
   spinButton.disabled = !canSingle;
   bulkButton.disabled = !canBulk;
   drawAllButton.disabled = !canDrawAll;
+  updateClaimControls();
 
   if (!loggedIn) {
     spinButton.textContent = "請先登入";
@@ -394,6 +405,102 @@ function updateSpinButtons() {
   spinButton.textContent = state.spinning ? "抽獎中..." : state.remaining >= 1 ? "開始抽獎" : "次數不足";
   bulkButton.textContent = state.remaining >= 10 ? "10 抽" : "抽獎次數不足 10 次";
   drawAllButton.textContent = state.remaining >= 1 ? "全部抽取" : "次數不足";
+}
+
+function currentClaimType() {
+  return document.querySelector('input[name="claimType"]:checked')?.value || "store";
+}
+
+function updateClaimMode() {
+  const claimType = currentClaimType();
+  const storeFields = document.getElementById("storeClaimFields");
+  const remittanceFields = document.getElementById("remittanceClaimFields");
+  if (storeFields) storeFields.hidden = claimType !== "store";
+  if (remittanceFields) remittanceFields.hidden = claimType !== "remittance";
+  updateClaimControls();
+}
+
+function updateClaimControls() {
+  const claimButton = document.getElementById("claimSpinsButton");
+  if (!claimButton) return;
+  const loggedIn = Boolean(state.profile);
+  claimButton.disabled = !loggedIn || state.claiming || state.spinning;
+  claimButton.textContent = state.claiming ? "領取中..." : loggedIn ? "領取抽獎次數" : "請先登入";
+}
+
+function setClaimResult(text, isError = false) {
+  const message = document.getElementById("claimResult");
+  if (!message) return;
+  message.textContent = text;
+  message.classList.toggle("is-error", isError);
+}
+
+async function claimSpins() {
+  if (!state.profile || state.claiming || state.spinning) {
+    setClaimResult("請先登入 LINE 後再領取。", true);
+    return;
+  }
+
+  const claimType = currentClaimType();
+  const payload = {
+    lineUserId: state.profile.lineUserId,
+    displayName: state.profile.displayName,
+    claimType,
+  };
+
+  if (claimType === "store") {
+    const paymentNo = document.getElementById("claimPaymentNo")?.value.trim() || "";
+    if (!paymentNo) {
+      setClaimResult("請輸入繳款編號。", true);
+      return;
+    }
+    payload.paymentNo = paymentNo;
+  } else {
+    const lookupValue = document.getElementById("claimLookupValue")?.value.trim() || "";
+    const amount = document.getElementById("claimAmount")?.value.trim() || "";
+    if (!lookupValue || !amount) {
+      setClaimResult("請輸入 UID / 角色名稱與消費金額。", true);
+      return;
+    }
+    payload.lookupValue = lookupValue;
+    payload.amount = amount;
+  }
+
+  state.claiming = true;
+  updateSpinButtons();
+  setClaimResult("正在確認訂單資料...");
+
+  try {
+    const response = await fetch("/api/member/claim-spins", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await response.json();
+
+    if (!data.ok) {
+      setClaimResult(data.message || "查無此訂單，請聯繫客服人員作協助確認", true);
+      return;
+    }
+
+    const suffix = data.sheetWriteback?.ok ? "" : "（已增加抽獎次數，試算表回寫稍後由後台紀錄追蹤）";
+    setClaimResult(`${data.message || "領取成功"}，目前剩餘 ${data.remaining ?? "-"} 次。${suffix}`, !data.sheetWriteback?.ok);
+    clearClaimInputs();
+    await refreshStatus();
+  } catch (error) {
+    console.error(error);
+    setClaimResult("系統忙碌中，請稍後再試。", true);
+  } finally {
+    state.claiming = false;
+    updateSpinButtons();
+  }
+}
+
+function clearClaimInputs() {
+  ["claimPaymentNo", "claimLookupValue", "claimAmount"].forEach((id) => {
+    const input = document.getElementById(id);
+    if (input) input.value = "";
+  });
 }
 
 function shouldSkipAnimation() {

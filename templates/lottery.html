@@ -48,6 +48,47 @@
 
         <div id="message" class="message">正在初始化 LIFF...</div>
 
+        <section class="claim-card" aria-labelledby="claimTitle">
+          <div class="claim-card-heading">
+            <div>
+              <span class="profile-label">抽獎次數</span>
+              <h2 id="claimTitle">領取抽獎次數</h2>
+            </div>
+          </div>
+
+          <div class="claim-mode-group" role="radiogroup" aria-label="付款方式">
+            <label>
+              <input type="radio" name="claimType" value="store" checked>
+              <span>超商繳費</span>
+            </label>
+            <label>
+              <input type="radio" name="claimType" value="remittance">
+              <span>匯款 / 轉帳</span>
+            </label>
+          </div>
+
+          <div id="storeClaimFields" class="claim-fields">
+            <label>
+              <span>繳款編號</span>
+              <input id="claimPaymentNo" class="claim-input" type="text" inputmode="numeric" autocomplete="off" placeholder="請輸入繳款編號">
+            </label>
+          </div>
+
+          <div id="remittanceClaimFields" class="claim-fields" hidden>
+            <label>
+              <span>UID 或角色名稱</span>
+              <input id="claimLookupValue" class="claim-input" type="text" autocomplete="off" placeholder="請輸入 UID 或角色名稱">
+            </label>
+            <label>
+              <span>消費金額</span>
+              <input id="claimAmount" class="claim-input" type="number" min="0" step="1" inputmode="numeric" placeholder="請輸入訂單金額">
+            </label>
+          </div>
+
+          <button id="claimSpinsButton" class="ghost-button claim-button" type="button" disabled>領取抽獎次數</button>
+          <p id="claimResult" class="claim-result">請先登入 LINE 後領取。</p>
+        </section>
+
       </div>
 
       <div class="wheel-panel">

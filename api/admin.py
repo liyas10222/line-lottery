@@ -31,6 +31,7 @@ from services.lottery_service import (
     update_prize_serial,
 )
 from services.operation_log_service import list_operation_logs, write_operation_log
+from services.order_claim_service import list_order_claim_records
 from services.prize_import_service import csv_template_text, import_prize_csv, preview_prize_import
 
 
@@ -136,6 +137,13 @@ def remove_member(line_user_id):
 @require_admin_token
 def lottery_records():
     result, status_code = list_lottery_records(request.args)
+    return jsonify(result), status_code
+
+
+@admin_bp.get("/order-claims")
+@require_admin_token
+def order_claims():
+    result, status_code = list_order_claim_records(request.args)
     return jsonify(result), status_code
 
 

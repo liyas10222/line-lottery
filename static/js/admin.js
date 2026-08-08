@@ -33,6 +33,10 @@ function bindAdmin() {
   document.getElementById("loadMemberButton").addEventListener("click", loadMember);
   document.getElementById("saveMemberButton").addEventListener("click", saveMember);
   document.getElementById("deleteMemberButton").addEventListener("click", deleteSelectedMember);
+  document.getElementById("loadClaimRecordsButton").addEventListener("click", loadOrderClaimRecords);
+  document.getElementById("claimSearch").addEventListener("keydown", (event) => {
+    if (event.key === "Enter") loadOrderClaimRecords();
+  });
   document.getElementById("loadRecordsButton").addEventListener("click", loadLotteryRecords);
   document.getElementById("recordSearch").addEventListener("keydown", (event) => {
     if (event.key === "Enter") loadLotteryRecords();
@@ -197,7 +201,7 @@ function renderAdminUnlocked() {
 }
 
 async function loadDashboard() {
-  await Promise.all([loadMembers(), loadLotteryRecords()]);
+  await Promise.all([loadMembers(), loadLotteryRecords(), loadOrderClaimRecords()]);
 }
 
 function saveToken() {
@@ -376,6 +380,7 @@ async function loadMembers() {
         <div class="member-row-actions">
           <button class="ghost-button compact-button" data-action="edit-member" type="button">修改次數</button>
           <button class="ghost-button compact-button" data-action="view-records" type="button">查看紀錄</button>
+          <button class="ghost-button compact-button" data-action="view-claims" type="button">領取紀錄</button>
           <button class="danger-button compact-button" data-action="delete-member" type="button">刪除用戶</button>
         </div>
       </div>
@@ -398,6 +403,13 @@ function handleMemberListClick(event) {
     document.getElementById("recordStatusFilter").value = "";
     loadLotteryRecords().catch(showError);
     setAdminMessage(`正在查詢 ${member.displayName} 的抽獎紀錄。`);
+    return;
+  }
+
+  if (button.dataset.action === "view-claims") {
+    document.getElementById("claimSearch").value = member.lineUserId;
+    loadOrderClaimRecords().catch(showError);
+    setAdminMessage(`正在查詢 ${member.displayName} 的領取點數紀錄。`);
     return;
   }
 
@@ -504,6 +516,45 @@ function renderLotteryRecordRow(record) {
         <span>${escapeHtml(formatDateTime(record.createdAt))}</span>
       </div>
       <span class="status-pill ${statusClass}">${escapeHtml(formatRecordStatus(record.status))}</span>
+    </div>
+  `;
+}
+
+async function loadOrderClaimRecords() {
+  try {
+    const q = document.getElementById("claimSearch").value.trim();
+    const params = new URLSearchParams({ limit: "100" });
+    if (q) params.set("q", q);
+    const data = await adminFetch(`/api/admin/order-claims?${params.toString()}`);
+    const list = document.getElementById("claimRecordList");
+    list.innerHTML = data.records.map(renderOrderClaimRecordRow).join("") || `<div class="empty-cell">查無領取點數紀錄</div>`;
+    setAdminMessage(`領取點數紀錄已更新，共 ${data.records.length} 筆。`);
+  } catch (error) {
+    showError(error);
+  }
+}
+
+function renderOrderClaimRecordRow(record) {
+  const writebackOk = record.sheetWritebackStatus === "ok";
+  const statusClass = writebackOk ? "is-active" : "is-muted";
+  const claimInfo = record.claimType === "store"
+    ? `繳款編號：${record.paymentNo || "-"}`
+    : `輸入：${record.lookupValue || "-"} / 金額：${record.amount || "-"}`;
+
+  return `
+    <div class="admin-row record-row claim-record-row">
+      ${record.pictureUrl
+        ? `<img class="member-avatar" alt="" src="${escapeHtml(record.pictureUrl)}">`
+        : `<div class="member-avatar member-avatar-placeholder">${escapeHtml((record.displayName || "?").slice(0, 1))}</div>`}
+      <div class="record-main">
+        <strong>${escapeHtml(record.displayName || "-")} 領取 ${escapeHtml(record.points)} 次</strong>
+        <span>${escapeHtml(record.lineUserId)}</span>
+        <span>${escapeHtml(formatClaimType(record.claimType))}｜${escapeHtml(claimInfo)}</span>
+        <span>來源：${escapeHtml(record.sourceSheet)} 第 ${escapeHtml(record.sourceRow)} 列｜${escapeHtml(record.paymentMethod || "-")}</span>
+        <span>${escapeHtml(formatDateTime(record.createdAt))}</span>
+        ${record.sheetWritebackMessage ? `<span>回寫訊息：${escapeHtml(record.sheetWritebackMessage)}</span>` : ""}
+      </div>
+      <span class="status-pill ${statusClass}">${writebackOk ? "已回寫" : "待確認"}</span>
     </div>
   `;
 }
@@ -933,6 +984,12 @@ function formatRecordStatus(status) {
   if (status === "won") return "中獎";
   if (status === "not_won") return "未中獎";
   return status || "-";
+}
+
+function formatClaimType(claimType) {
+  if (claimType === "store") return "超商繳費";
+  if (claimType === "remittance") return "匯款 / 轉帳";
+  return claimType || "-";
 }
 
 function formatDateTime(value) {
